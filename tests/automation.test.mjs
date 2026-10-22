@@ -83,8 +83,8 @@ test('full automatic pipeline preserves 80-point original title, binds author an
 test('score below 80 regenerates then scores, never accepts a low-scoring candidate',async t=>{
   const f=setup(t,{aiOverrides:{score:async title=>({total:title==='案件原书名'?79:82,scores:{},reason:'评分依据'})}});await f.importBook();const j=await f.run();assert.equal(j.title,'全新案件书名');assert.equal(j.scores.length,2);assert.equal(j.status,j.scheme.destination==='submit'?'watching':'done');
 });
-test('repeated low scores stop before generating cover or uploading',async t=>{
-  const f=setup(t,{aiOverrides:{score:async()=>({total:79,scores:{},reason:'题材不明'})}});await f.importBook();const j=await f.run();assert.equal(j.stage,'title');assert.equal(j.status,'attention');assert.equal(j.scores.length,4);assert.equal(f.calls.includes('create'),false);
+test('two low-scoring generations fall back to the highest legal title and pass upload',async t=>{
+  let n=0;const f=setup(t,{aiOverrides:{title:async()=>['候选甲','候选乙'][n++],score:async title=>({total:title==='候选甲'?79:70,scores:{},reason:'题材不明'})}});await f.importBook();const j=await f.run();assert.equal(j.status,'watching');assert.equal(n,2);assert.equal(j.scores.length,3);assert.equal(j.title,'候选甲');assert.equal(j.titleFallback,true);assert.equal(f.remote.payload.novel_title,'候选甲');
 });
 test('network failure resumes saved intro and cover rather than regenerating successful stages',async t=>{
   let n=0;const f=setup(t,{aiOverrides:{cover:async()=>{n++;throw new Error('HTTP 503');}}});await f.importBook();let j=await f.run();assert.equal(n,3);assert.equal(j.stage,'cover');
@@ -345,4 +345,59 @@ test('old title scores are reassessed using the new rubric and keep the writer n
  const f=setup(t);const j=await f.importBook();j.analysis=structuredClone(analysis);j.stage='title';j.scores=[{title:'旧评分',total:99}];j.platformStyle='飞卢风';j.titleStyle='强钩子';
  let context;f.ai.score=async(title,a)=>{context=a;return {total:80,reason:'new',scores:{}};};await f.queue.step(j);
  assert.equal(j.title,j.originalTitle);assert.equal(j.titleScoreVersion,2);assert.equal(context.titleStyle,'强钩子');
+});
+
+test('original wins low-score fallback; malformed and duplicate candidates are excluded',async t=>{
+ let n=0;const f=setup(t,{aiOverrides:{title:async()=>n++===0?'长'.repeat(31):'已占用',score:async title=>({total:title==='已占用'?95:71})}});
+ const j=await f.importBook();f.queue.store.state.jobs.push({id:'other',status:'done',cfg:{title:'已占用'},scheme:j.scheme});
+ await f.run();assert.equal(j.status,'watching');assert.equal(j.title,j.originalTitle);assert.equal(j.titleScore,71);assert.equal(n,2);
+});
+test('invalid title model validation consumes one attempt without stopping a usable original',async t=>{
+ let n=0;const f=setup(t,{aiOverrides:{title:async()=>{n++;throw Object.assign(Error('too long'),{code:'INVALID_TITLE',title:'长'.repeat(31)});},score:async()=>({total:69})}});
+ const j=await f.importBook();await f.run();assert.equal(j.status,'watching');assert.equal(j.title,j.originalTitle);assert.equal(n,2);
+});
+test('all duplicate candidates still stop without upload',async t=>{
+ const f=setup(t,{aiOverrides:{title:async()=> '同名',score:async()=>({total:90})}}),j=await f.importBook();
+ for(const title of [j.originalTitle,'同名'])f.queue.store.state.jobs.push({id:title,status:'done',cfg:{title},scheme:j.scheme});
+ await f.run();assert.equal(j.status,'attention');assert.match(j.error.message,/同名/);assert.equal(j.titleGenerations,2);assert.equal(f.calls.includes('create'),false);
+});
+test('candidate score failure and restart retain two-generation budget and pending candidate',async t=>{
+ let n=0,fail=true;const f=setup(t,{aiOverrides:{title:async()=> '候选'+(++n),score:async title=>{if(title==='候选2'&&fail)throw Error('HTTP 503');return {total:title==='候选2'?78:60};}}});
+ let j=await f.importBook();await f.run();assert.equal(j.stage,'title');assert.equal(n,2);assert.equal(j.pendingTitle,'候选2');
+ fail=false;f.restart();j=f.queue.store.state.jobs[0];f.queue.control(j.id,'retry');await f.run();assert.equal(n,2);assert.equal(j.title,'候选2');assert.equal(j.status,'watching');
+});
+test('old failed title tasks reuse recorded scores and choose best without more model calls',async t=>{
+ const f=setup(t),j=await f.importBook();j.analysis=structuredClone(analysis);j.stage='title';j.titleScoreVersion=2;j.scores=[{title:j.originalTitle,total:70,original:true},{title:'旧候选甲',total:78,original:false},{title:'旧候选乙',total:72,original:false}];
+ await f.queue.step(j);assert.equal(j.title,'旧候选甲');assert.equal(j.titleGenerations,2);assert.equal(f.calls.includes('title'),false);assert.equal(f.queue.titleReady(j),true);
+});
+test('repack with current settings preserves bound pen at its reserved limit',async t=>{
+ const p={id:'p',name:'笔名甲',limit:1,enabled:true};const f=setup(t,{settings:{penLibraryOnly:true,penName:'',penNames:[p]}}),j=await f.importBook();
+ j.penId=p.id;j.settings.penName=p.name;j.analysis=structuredClone(analysis);j.catalog=structuredClone(site);j.stage='title';j.status='attention';
+ f.queue.control(j.id,'review',{useCurrentSettings:true});assert.equal(j.settings.penName,'笔名甲');
+ await f.run();assert.equal(j.status,'watching');assert.equal(f.remote.payload.pen_name,'笔名甲');assert.match(j.prompt,/笔名甲/);
+});
+test('later stages recover blank library author and rebuild cover with the correct pen',async t=>{
+ for(const stage of ['intro','prompt','cover','check','upload']){
+  const p={id:'p',name:'恢复笔名',enabled:true};const f=setup(t,{settings:{penLibraryOnly:true,penName:'',penNames:[p]}}),j=await f.importBook();
+  j.stage='cover';f.ai.cover=async()=>{throw Error('stop before upload');};j.analysis=structuredClone(analysis);await f.run();
+  j.stage=stage;j.penId=p.id;j.settings.penName='';j.prompt='旧空署名';j.cover='old.png';
+  const result=await f.queue.step(j);assert.equal(j.settings.penName,'恢复笔名');
+  if(['prompt','cover','check','upload'].includes(stage)){assert.equal(result,'stay');assert.equal(j.stage,'prompt');assert.equal(j.cover,undefined);await f.queue.step(j);assert.match(j.prompt,/恢复笔名/);}
+ }
+});
+test('missing pen id is allocated using account and genre constraints; removed binding reallocates',async t=>{
+ const pens=[{id:'wrong',name:'其他账号',account:'not-current'},{id:'p',name:'可用作者',enabled:true,channel:'男频'}];
+ const f=setup(t,{settings:{penLibraryOnly:true,penName:'',penNames:pens}}),j=await f.importBook();
+ j.penId='removed';j.settings.penName='旧作者';await f.run();assert.equal(j.penId,'p');assert.equal(f.remote.payload.pen_name,'可用作者');
+});
+test('no eligible pen waits and automatically proceeds after one becomes available',async t=>{
+ const f=setup(t,{settings:{penLibraryOnly:true,penName:'',penNames:[]}}),j=await f.importBook();
+ await f.run();assert.equal(j.status,'waiting');assert.equal(f.calls.includes('create'),false);
+ f.settings({penNames:[{id:'p',name:'补充作者',enabled:true}]});j.retryAt=0;await f.run();assert.equal(j.status,'watching');assert.equal(j.settings.penName,'补充作者');
+});
+test('uncertain remote creation recovers original pen from package even after library rename',async t=>{
+ const f=setup(t),create=f.runner.apiCreateFromFile;f.runner.apiCreateFromFile=async cfg=>{await create(cfg);throw Error('response lost');};
+ let j=await f.importBook();await f.run();j.settings.penName='';j.penId='p';f.settings({penLibraryOnly:true,penName:'',penNames:[{id:'p',name:'新名字'}]});
+ f.queue.save();f.restart();j=f.queue.store.state.jobs[0];f.queue.control(j.id,'retry');await f.run();
+ assert.equal(j.status,'watching');assert.equal(j.settings.penName,'测试作者');assert.equal(f.calls.filter(x=>x==='create').length,1);
 });

@@ -16,13 +16,13 @@ export const DEFAULT_SCHEME = {
   coverStyle: '根据小说题材选择画风，竖版，清晰书名与作者署名',
   storyRule: 'words', longThreshold: 20000, entry: 'auto', finished: 'analysis',
   destination: 'submit', imageSize: '1024x1536', autoStart: true, concurrency: 1,
-  retries: 2, titleAttempts: 3,
+  retries: 2, titleAttempts: 2,
   firstSubmitMode: 'minimum', firstChapterCount: 12, firstMinChapters: 10, firstMaxChapters: 15,
   firstMinWords: 20000, completeAfterContract: true,
 };
 
 export function validScheme(input = {}) {
-  const s = { ...DEFAULT_SCHEME, ...input };
+  const s = { ...DEFAULT_SCHEME, ...input, titleAttempts: 2 };
   for (const [key, choices] of Object.entries({ storyRule: ['words', 'analysis', 'long', 'short'],
     finished: ['analysis', 'finished', 'serial'], destination: ['package', 'library', 'submit'],
     imageSize: ['1024x1536', '768x1024', '720x1280', '1024x1024', '1280x720'], firstSubmitMode: ['minimum','count','all'] })) {

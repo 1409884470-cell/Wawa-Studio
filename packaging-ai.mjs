@@ -126,7 +126,7 @@ export function createPackagingAI({ settings, coverDir, decodeImage, compressIma
     },
     async title(analysis, history) {
       const v = await json(renderPrompt(settings,"title",{v0:(JSON.stringify(history.map(x => x.title))),v1:(JSON.stringify(analysis))}),'title');
-      if (typeof v.title !== 'string' || !v.title.trim() || v.title.length > 30) throw new Error('生成书名为空或超出30字');
+      if (typeof v.title !== 'string' || !v.title.trim() || v.title.length > 30) {const e=new Error('生成书名为空或超出30字');e.code='INVALID_TITLE';e.title=typeof v.title==='string'?v.title:'';throw e;}
       return v.title.trim();
     },
     async intro(title, analysis, style) {

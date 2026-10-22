@@ -29,14 +29,14 @@
         <label class="aq-wide">简介风格<textarea id="aqIntroStyle" rows="2" maxlength="2000"></textarea></label>
         <label class="aq-wide">本批封面偏好（可留空，由剧情决定）<textarea id="aqCoverStyle" rows="2" maxlength="2000"></textarea></label>
       </div>
-      <div class="aq-rule"><b>封面提示词</b><span>基础要求 + 本书剧情画面 + 明亮去模板要求 + 自定义补充。每本书单独分析。</span><button data-prompt-open="post:coverScene">设置封面提示词</button></div><div class="aq-rule"><b>书名自动评分</b><span>原名 ≥80 分沿用；低于80分自动生成并重新评分。吸引力占45分。</span></div>
+      <div class="aq-rule"><b>封面提示词</b><span>基础要求 + 本书剧情画面 + 明亮去模板要求 + 自定义补充。每本书单独分析。</span><button data-prompt-open="post:coverScene">设置封面提示词</button></div><div class="aq-rule"><b>书名自动评分</b><span>原名 ≥80 分沿用；最多再生成2次，仍不足80分则采用最高分合法书名。吸引力占45分。</span></div>
       <div class="aq-rule"><b>首投正常正文</b><span>全文先入仓，仅提交指定首投章节，部分投稿保持连载状态。按有效正文计数；不足50字的章节不上传。拒稿修订开关在“自动流程”设置中。</span></div>
       <div class="aq-rule"><b>笔名：<span id="aqPenName">未设置</span></b><span>从设置读取，自动加入投稿署名和封面绘画提示词。</span><button data-settings-open="pens">设置笔名</button><button data-settings-open="ai">模型设置</button></div>
       <details class="aq-advanced"><summary>执行设置</summary><div class="aq-form">
         <label>封面尺寸<select id="aqImageSize">${opts(['1024x1536', '768x1024','720x1280','1024x1024','1280x720'].map(x=>[x,x]))}</select></label>
 
         <label>网络失败自动重试次数<input id="aqRetries" type="number" min="0" max="3"></label>
-        <label>低分书名最多重新生成<input id="aqTitleAttempts" type="number" min="1" max="5"></label>
+        <input id="aqTitleAttempts" type="hidden" value="2">
       </div><p>每本书通常包含分析、评分、简介、提示词等多次文本请求及1次图像请求。重新生成与网络重试可能增加费用。上传结果不明确时先核对，不自动重复创建。</p></details>
       <label class="aq-check"><input id="aqAutoStart" type="checkbox">导入后立即按照本方案执行</label></div>
     </div>
@@ -154,5 +154,5 @@
   async function refreshSettings(){const [s,c]=await Promise.all([api.getSettings(),api.getCredentials()]);$('aqGlobalConcurrency').value=s.submissionConcurrency||2;$('aqPenName').textContent=`笔名库：${s.penNames?.filter(p=>p.enabled!==false).length||0}个可用`;document.querySelector('.login-status').textContent=c.has?'已配置账号（投稿时验证）':'未配置账号';document.querySelector('.login-phone').textContent=String(c.phone||'').replace(/^(\d{3})\d{4}(\d{4})$/,'$1****$2');}
   document.addEventListener('click',e=>{if(e.target.closest('[data-page="automation"]'))run(refreshSettings)();});
   api.onAutomationState(next=>{state=next;renderSchemes();render();});
-  run(async()=>{[state,library]=await Promise.all([api.automationState(),api.getSiteData()]);defaults=state.schemes.find(s=>s.name===state.defaultScheme)||state.schemes[0]||{name:'默认自动包装',introStyle:'贴合内容，突出冲突，保留悬念',coverStyle:'根据小说内容选择，竖版，清晰书名与作者署名',storyRule:'words',longThreshold:20000,entry:'auto',finished:'analysis',destination:'submit',imageSize:'1024x1536',autoStart:true,concurrency:1,retries:2,titleAttempts:3};$('aqEntry').innerHTML=opts([['auto','根据内容匹配（长篇默认普通投稿）'],...(library.entries||[]).map(e=>[e,e])]);renderSchemes();fillScheme(defaults);$('aqSchemes').value=defaults.name;render();await refreshSettings();message('选择包装方案后批量导入。正常稿件自动完成，只有异常需要处理；重启后点击“继续队列”接着执行。');})();
+  run(async()=>{[state,library]=await Promise.all([api.automationState(),api.getSiteData()]);defaults=state.schemes.find(s=>s.name===state.defaultScheme)||state.schemes[0]||{name:'默认自动包装',introStyle:'贴合内容，突出冲突，保留悬念',coverStyle:'根据小说内容选择，竖版，清晰书名与作者署名',storyRule:'words',longThreshold:20000,entry:'auto',finished:'analysis',destination:'submit',imageSize:'1024x1536',autoStart:true,concurrency:1,retries:2,titleAttempts:2};$('aqEntry').innerHTML=opts([['auto','根据内容匹配（长篇默认普通投稿）'],...(library.entries||[]).map(e=>[e,e])]);renderSchemes();fillScheme(defaults);$('aqSchemes').value=defaults.name;render();await refreshSettings();message('选择包装方案后批量导入。正常稿件自动完成，只有异常需要处理；重启后点击“继续队列”接着执行。');})();
 })();

@@ -116,7 +116,12 @@ export class AutomationQueue {
         if (['finished', 'serial'].includes(patch?.finished)) j.overrides.finished = patch.finished;
         if (typeof patch?.intro === 'string') { if(!patch.intro.trim() || patch.intro.trim().length>500)throw new Error('简介须为1至500字'); j.sourceIntro=patch.intro.trim();j.intro=j.sourceIntro; }
         if (patch?.ackWarnings) j.warningsApproved = true;
-        if (patch?.useCurrentSettings) { j.settings = publicSettings(this.getSettings()); j.account = accountKey(this.getAccount()); }
+        if (patch?.useCurrentSettings) {
+          const penName=j.settings.penName || j.cfg?.penName || j.settings.penNames?.find(p=>p.id===j.penId)?.name;
+          const account=accountKey(this.getAccount());
+          if(j.account!==account)delete j.penId;
+          j.settings = {...publicSettings(this.getSettings()),penName:penName||''}; j.account = account;
+        }
         if (patch?.firstSubmitMode) {
           j.scheme = validScheme({...j.scheme,firstSubmitMode:patch.firstSubmitMode,firstChapterCount:patch.firstChapterCount,firstMinChapters:patch.firstMinChapters,firstMaxChapters:patch.firstMaxChapters});
           if(j.stage!=='rewrite' && STAGES.indexOf(j.stage)>=STAGES.indexOf('check'))j.stage='check';
@@ -151,6 +156,7 @@ export class AutomationQueue {
     if (!this.store.state.paused) this.pump();
   }
   syncPenName(j) {
+    if(j.hidden||j.status==='canceled')return;
     if(j.penId||this.getSettings().penLibraryOnly)return;
     if(this.getSettings().penNames?.length)return;
     const pen=this.getSettings().penName?.trim();
@@ -165,6 +171,46 @@ export class AutomationQueue {
   updatePendingPenNames() {
     for(const j of this.store.state.jobs)if(!this.active.has(j.id))this.syncPenName(j);
     this.save();
+  }
+  ensurePenName(j) {
+    const current=this.getSettings(),previous=j.settings.penName?.trim();
+    const locked=j.remote||j.uploadIntent||j.repairSource;
+    let name=previous;
+    if(locked){
+      name=j.cfg?.penName?.trim()||previous||j.settings.penNames?.find(p=>p.id===j.penId)?.name;
+      if(!name)throw new Error('原投稿笔名缺失，请核对原作品署名后恢复任务备份');
+    }else if(current.penLibraryOnly||current.penNames?.length){
+      const eligible=p=>p&&p.enabled!==false&&(!p.account||p.account===this.getAccount())&&(!p.channel||p.channel===j.analysis?.channel)&&(!p.genre||j.analysis?.novelType?.join('/').includes(p.genre));
+      let p=current.penNames?.find(p=>p.id===j.penId);
+      if(!eligible(p)){
+        p=current.penNames?.find(p=>p.name===previous&&eligible(p)&&(!p.limit||penStats(p,this.store.state.jobs.filter(x=>x.id!==j.id)).total<p.limit));
+        p??=choosePen(current,this.store.state.jobs.filter(x=>x.id!==j.id),{...j,penId:undefined},this.getAccount());
+      }
+      if(!p?.name?.trim()){const e=new Error('没有符合账号、题材或额度条件的可用笔名，请在笔名库补充');e.waiting=true;throw e;}
+      j.penId=p.id;name=p.name.trim();
+    }else name=current.penName?.trim()||previous;
+    if(!name){const e=new Error('笔名库暂无可用笔名，请先添加并启用');e.waiting=true;throw e;}
+    j.settings.penName=name;
+    // 已上传及结果待核对任务只恢复原署名，不改动远端包装。
+    if(name!==previous&&!locked){
+      const hadCover=!!(j.prompt||j.cover);
+      for(const key of ['prompt','cover','remoteCover','cfg','result'])delete j[key];
+      delete j.artifacts.package;
+      if(hadCover)j.coverRevision=(j.coverRevision||0)+1;
+      j.history.push({at:now(),stage:j.stage,result:'updated',message:'笔名已绑定：'+name});
+      if(hadCover&&STAGES.indexOf(j.stage)>=STAGES.indexOf('prompt')){j.stage='prompt';this.save();return true;}
+    }
+    this.save();return false;
+  }
+  validTitle(j,x) {
+    return typeof x?.title==='string'&&x.title.trim().length>0&&x.title.length<=30&&Number.isFinite(x.total)&&!x.rejected&&
+      !this.store.state.jobs.some(other=>other.id!==j.id&&other.status!=='canceled'&&(other.cfg?.title===x.title||(other.titleScoreVersion===2&&other.title===x.title)));
+  }
+  titleReady(j) {
+    if(j.titleScoreVersion!==2||!this.validTitle(j,{title:j.title,total:j.titleScore}))return false;
+    if(j.titleScore>=80)return true;
+    const candidates=(j.scores||[]).filter(x=>this.validTitle(j,x));
+    return j.titleFallback===true&&j.titleGenerations>=2&&candidates.some(x=>x.title===j.title&&x.total===j.titleScore)&&candidates.every(x=>x.total<=j.titleScore);
   }
   pump() {
     if (this.running) return this.draining;
@@ -290,6 +336,7 @@ export class AutomationQueue {
   }
   async step(j) {
     const s = j.scheme, network = s.destination !== 'package';
+    if(['title','intro','entry','prompt','cover','check','upload'].includes(j.stage)&&this.ensurePenName(j))return 'stay';
     if(!j.plan && j.artifacts.chapters && ['upload','submit','verify'].includes(j.stage)) j.plan=initialPlan(this.chapters(j),s);
     const ai = image => this.aiFactory(this.settings(j, image));
     switch (j.stage) {
@@ -346,27 +393,29 @@ export class AutomationQueue {
       case 'title': {
         Object.assign(j.analysis,{platformStyle:j.platformStyle||j.analysis.platformStyle||'',titleStyle:j.titleStyle||j.analysis.titleStyle||''});
         if(j.titleScoreVersion!==2){j.scores=[];delete j.pendingTitle;j.titleScoreVersion=2;}
-        const current=this.getSettings();
-        if((current.penLibraryOnly||current.penNames?.length) && !j.penId){
-          const p=choosePen(current,this.store.state.jobs,j,this.getAccount());
-          if(!p){const e=new Error('没有符合条件或尚有额度的笔名，请在笔名库补充');e.waiting=true;throw e;}
-          j.penId=p.id;j.settings.penName=p.name;this.save();
-        }
-
-        if (!j.settings.penName?.trim()) throw new Error('请先在设置中填写笔名，再使用当前设置重新包装');
         const engine = ai();
+        if(!j.scores.length){j.titleGenerations=0;delete j.titleFallback;}
         if (!j.scores.length) {
           j.scores.push({ title: j.originalTitle, ...await engine.score(j.originalTitle, j.analysis), original: true }); this.save();
         }
-        const acceptable = x => x.total >= 80 && x.title.length > 0 && x.title.length <= 30 &&
-          !this.store.state.jobs.some(other => other.id !== j.id && other.status !== 'canceled' && other.cfg?.title === x.title);
-        let best = j.scores.find(acceptable);
-        while (!best && j.scores.length <= s.titleAttempts) {
-          if (!j.pendingTitle) { j.pendingTitle = await engine.title(j.analysis, j.scores); this.save(); }
-          j.scores.push({ title: j.pendingTitle, ...await engine.score(j.pendingTitle, j.analysis), original: false }); delete j.pendingTitle; this.save();
-          best = j.scores.find(acceptable);
+        j.titleGenerations??=j.scores.filter(x=>!x.original).length+(j.pendingTitle?1:0);
+        const ranked=()=>j.scores.filter(x=>this.validTitle(j,x)).sort((a,b)=>b.total-a.total);
+        let best=ranked().find(x=>x.total>=80);
+        while(!best&&(j.pendingTitle||j.titleGenerations<2)){
+          if(!j.pendingTitle){
+            try{j.pendingTitle=await engine.title(j.analysis,j.scores);}
+            catch(e){if(e.code!=='INVALID_TITLE')throw e;j.titleGenerations++;j.scores.push({title:e.title||'',total:0,original:false,rejected:true,reason:e.message});this.save();continue;}
+            j.titleGenerations++;this.save();
+          }
+          const title=j.pendingTitle;
+          if(typeof title!=='string'||!title.trim()||title.length>30)j.scores.push({title:typeof title==='string'?title:'',total:0,original:false,rejected:true,reason:'书名为空或超过30字'});
+          else j.scores.push({title:title.trim(),...await engine.score(title.trim(),j.analysis),original:false});
+          delete j.pendingTitle;this.save();best=ranked().find(x=>x.total>=80);
         }
-        if (!best) throw new Error('候选书名均未达到80分、超长或同名；请检查分析后重新包装');
+        best??=ranked()[0];
+        if(!best)throw new Error('原名与两次候选均为空、超长或同名，请调整书名后重新包装');
+        j.titleFallback=best.total<80;
+        if(j.titleFallback)j.history.push({at:now(),stage:'title',result:'fallback',message:`两次生成后采用最高分合法书名：${best.title}（${best.total}分）`});
         j.title = best.title; j.titleScore = best.total; j.titleScoreVersion=2;j.titleChanged = j.title !== j.originalTitle; break;
       }
       case 'intro':
@@ -389,8 +438,7 @@ export class AutomationQueue {
       case 'cover': j.cover ??= await ai(true).cover(j.prompt, s.imageSize, j.coverRevision?`${j.id}-v${j.coverRevision}`:j.id); break;
       case 'check': {
         validateAnalysis(j.analysis, j.catalog);
-        if ((j.titleScore < 80 || j.titleScoreVersion!==2) && !j.remote && !j.uploadIntent){j.scores=[];delete j.pendingTitle;delete j.titleScore;delete j.intro;delete j.prompt;delete j.cover;j.stage='title';return 'stay';}
-        if (j.titleScore < 80) throw new Error('书名未通过80分门槛');
+        if (!this.titleReady(j) && !j.remote && !j.uploadIntent){delete j.titleScore;delete j.intro;delete j.prompt;delete j.cover;j.stage='title';return 'stay';}
         j.plan = initialPlan(this.chapters(j),s);
         j.cfg = { localFile: j.file, title: j.title, intro: j.intro, cover: j.cover, penName: j.settings.penName,
           wordCount: j.words, category: j.storyType === 'long' ? '长篇' : '短篇', channel: j.analysis.channel,
@@ -403,8 +451,8 @@ export class AutomationQueue {
       }
       case 'upload': {
         if (!network || j.remote) break;
-        if(!j.uploadIntent&&(j.titleScoreVersion!==2||j.titleScore<80)){
-          j.scores=[];delete j.pendingTitle;delete j.titleScore;delete j.intro;delete j.prompt;delete j.cover;delete j.cfg;
+        if(!j.uploadIntent&&!this.titleReady(j)){
+          delete j.titleScore;delete j.intro;delete j.prompt;delete j.cover;delete j.cfg;
           j.stage='title';return 'stay';
         }
         if (!j.uploadIntent) { j.warehouseAll = true; this.save(); }
