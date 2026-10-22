@@ -1,0 +1,69 @@
+name: Build version backups
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-backups.yml]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - version: 4.5.0
+            ref: 6f857f7e471d8e5e30e639bdb384f0ecd0dffd9f
+          - version: 4.5.1
+            ref: 3877a0a9d825471374448dcd60a2cd2ee0a8b2ac
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ matrix.ref }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Prepare embedded Python 3.12.8
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip -OutFile python-runtime.zip
+          Expand-Archive python-runtime.zip runtime
+          Set-Content -LiteralPath runtime/python312._pth -Value "python312.zip`n.`n..`nimport site" -Encoding ascii
+          Remove-Item -LiteralPath python-runtime.zip
+      - name: Install and test
+        shell: pwsh
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./runtime/python.exe engine/test_app.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build Windows installer
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm run dist -- --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish immutable version backup
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ matrix.version }}
+          SOURCE_REF: ${{ matrix.ref }}
+        run: |
+          $installer = Get-ChildItem dist -Filter '*安装包.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Installer not found' }
+          $digest = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLower()
+          Set-Content SHA256.txt "$digest  $($installer.Name)" -Encoding utf8
+          Compress-Archive -LiteralPath runtime -DestinationPath python-runtime-3.12.8.zip
+          $notes = "Version $env:VERSION backup. Source commit: $env:SOURCE_REF. Installer includes Python runtime. User accounts, API keys and manuscripts are excluded. Rebuild: extract the runtime zip, run npm ci, then npm run dist. Rollback: exit the app, back up the local user-data directory, then install the older version."
+          Set-Content release-notes.txt $notes -Encoding utf8
+          gh release view "v$env:VERSION" --repo "$env:GITHUB_REPOSITORY" *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Output 'Version already backed up; leaving it unchanged.'; exit 0 }
+          gh release create "v$env:VERSION" $installer.FullName SHA256.txt python-runtime-3.12.8.zip --repo "$env:GITHUB_REPOSITORY" --target "$env:SOURCE_REF" --title "蛙蛙创作工作室 $env:VERSION" --notes-file release-notes.txt --latest=false
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
