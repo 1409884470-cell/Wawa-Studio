@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>蛙蛙创作工作室</title>
+<link rel="icon" type="image/png" href="assets/favicon.png">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="automation.css">
+<link rel="stylesheet" href="studio.css">
+</head>
+<body>
+
+<div class="desktop" id="desktop">
+  <div class="app-window" id="appWindow">
+
+    <!-- ======= 标题栏 ======= -->
+    <header class="titlebar" id="titlebar">
+      <div class="titlebar-left">
+        <span class="titlebar-icon">
+          <img src="assets/brand.png" alt="" style="width:16px;height:16px;object-fit:contain">
+        </span>
+        <span class="titlebar-text">蛙蛙创作工作室</span>
+      </div>
+      <div class="titlebar-controls">
+        <button class="win-btn" id="btnMin" aria-label="最小化">
+          <svg width="11" height="11" viewBox="0 0 11 11"><path d="M0 5.5h11" stroke="currentColor" stroke-width="1"/></svg>
+        </button>
+        <button class="win-btn" id="btnMax" aria-label="最大化">
+          <svg width="11" height="11" viewBox="0 0 11 11"><rect x="0.5" y="0.5" width="10" height="10" rx="1.5" fill="none" stroke="currentColor"/></svg>
+        </button>
+        <button class="win-btn close" id="btnClose" aria-label="关闭">
+          <svg width="11" height="11" viewBox="0 0 11 11"><path d="M0.5 0.5l10 10M10.5 0.5l-10 10" stroke="currentColor" stroke-width="1"/></svg>
+        </button>
+      </div>
+    </header>
+
+    <div class="app-body">
+
+      <!-- ======= 侧边栏 ======= -->
+      <aside class="sidebar">
+        <div class="brand">
+          <div class="brand-logo">
+            <img src="assets/brand.png" alt="龙利鱼" style="width:34px;height:34px;object-fit:contain">
+          </div>
+          <div class="brand-text">
+            <div class="brand-name">蛙蛙创作工作室</div>
+            <div class="brand-sub">写作 · 投稿 · 收益</div>
+          </div>
+        </div>
+
+        <nav class="nav">
+          <div class="nav-group">
+            <div class="nav-label">概览</div>
+            <button class="nav-item active" data-page="automation"><span class="nav-ico">✦</span><span>自动包装投稿</span></button>
+            <button class="nav-item" data-page="workbench">
+              <svg class="nav-ico" viewBox="0 0 24 24"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              <span>工作台</span>
+            </button>
+          </div>
+
+          <div class="nav-group">
+            <div class="nav-label">投稿管理</div>
+            <button class="nav-item" data-page="tasks">
+              <svg class="nav-ico" viewBox="0 0 24 24"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+              <span>手动投稿</span>
+            </button>
+            <button class="nav-item" data-page="short">
+              <svg class="nav-ico" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+              <span>短篇投稿</span>
+            </button>
+            <button class="nav-item" data-page="revenue">
+              <svg class="nav-ico" viewBox="0 0 24 24"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+              <span>收益数据</span>
+            </button>
+          </div>
+
+          <div class="nav-group">
+            <div class="nav-label">创作工具</div>
+            <button class="nav-item" data-page="cover">
+              <svg class="nav-ico" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+              <span>封面生成</span>
+            </button>
+            <button class="nav-item" data-page="text">
+              <svg class="nav-ico" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>
+              <span>简介书名生成</span>
+            </button>
+          </div>
+
+          <div class="nav-group">
+            <div class="nav-label">系统</div>
+            <button class="nav-item" data-page="logs">
+              <svg class="nav-ico" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg>
+              <span>运行日志</span>
+            </button>
+            <button class="nav-item" data-page="ai">
+              <svg class="nav-ico" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></svg>
+              <span>AI设置</span>
+            </button>
+            <button class="nav-item" data-page="account">
+              <svg class="nav-ico" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>账号设置</span>
+            </button>
+          </div>
+        </nav>
+
+        <div class="login-box">
+          <div class="login-status">账号状态待读取</div>
+          <div class="login-phone"></div>
+        </div>
+      </aside>
+
+      <!-- ======= 主内容区 ======= -->
+      <main class="main">
+
+        <!-- 工作台 -->
+        <section class="page active" id="page-automation"></section>
+        <section class="page" id="page-workbench">
+          <div class="page-head">
+            <div>
+              <h1>工作台</h1>
+              <p class="page-sub">欢迎回来，任务与收益一目了然，继续加油~</p>
+            </div>
+            <button class="btn btn-primary" data-goto="tasks">＋ 新建投稿任务</button>
+          </div>
+
+          <div class="stat-grid">
+            <div class="stat-card">
+              <div class="stat-label">任务总数</div>
+              <div class="stat-value" id="wbTotal">—<span class="unit">本</span></div>
+              <div class="stat-delta">来自「长篇投稿」任务列表</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">投稿成功</div>
+              <div class="stat-value" id="wbDone">—<span class="unit">本</span></div>
+              <div class="stat-delta" id="wbDoneSub">—</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">排队 / 投稿中</div>
+              <div class="stat-value" id="wbBusy">—<span class="unit">本</span></div>
+              <div class="stat-delta">含排队与进行中的任务</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-label">本月收益</div>
+              <div class="stat-value"><span class="rmb">¥</span><span id="wbRevenue">—</span></div>
+              <div class="stat-delta" id="wbRevenueSub">打开「收益数据」页同步</div>
+            </div>
+          </div>
+
+          <div class="card-row">
+            <div class="card quick-card" data-goto="tasks">
+              <div class="quick-icon">📤</div>
+              <div><b>新建投稿任务</b><p>选择稿件与平台，一键批量投稿</p></div>
+            </div>
+            <div class="card quick-card" data-goto="cover">
+              <div class="quick-icon">🎨</div>
+              <div><b>生成封面</b><p>AI 一键生成小说封面图</p></div>
+            </div>
+            <div class="card quick-card" data-goto="text">
+              <div class="quick-icon">✍️</div>
+              <div><b>简介书名生成</b><p>AI 生成书名 / 简介 / 封面提示词</p></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>最近投稿记录</h3>
+              <button class="btn-link" data-goto="tasks">查看全部 →</button>
+            </div>
+            <table class="table">
+              <thead><tr><th>书名</th><th>投稿入口</th><th>状态</th><th>站内状态</th></tr></thead>
+              <tbody id="recentBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- 投稿任务 -->
+        <section class="page" id="page-tasks">
+          <div class="page-head">
+            <div>
+              <h1>长篇投稿</h1>
+              <p class="page-sub">面向蛙蛙写作站内的批量投递：导入本地稿件，或从站内作品一键添加</p>
+            </div>
+            <div class="page-head-actions">
+              <button class="btn btn-primary" id="btnImportLocal">＋ 本地小说（txt/docx）</button>
+              <div class="siteadd-wrap">
+                <button class="btn btn-ghost" id="btnSiteAdd">从站内作品添加</button>
+                <div class="site-pop" id="sitePop" hidden>
+                  <input id="siteSearch" type="text" placeholder="🔍 搜索书名…">
+                  <div class="import-list" id="siteList"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <input type="file" id="taskFile" accept=".txt,.docx" hidden>
+
+          <div class="card runbar-card" id="runbarCard">
+            <div class="runbar">
+              <label class="run-check"><input type="checkbox" id="runDry" checked> 干跑预览（只核对不提交）</label>
+              <label class="run-check"><input type="checkbox" id="runHeadless" checked> 后台无头运行</label>
+              <div class="runbar-actions">
+                <button class="btn btn-ghost btn-sm" id="btnRefreshSite">↻ 刷新站内状态</button>
+                <button class="btn btn-ghost btn-sm" id="btnPause" hidden>⏸ 暂停投稿</button>
+                <button class="btn btn-ghost btn-sm" id="btnSkip" hidden>⏭ 跳过本书</button>
+                <button class="btn btn-danger btn-sm" id="btnStop" hidden>⏹ 停止投稿</button>
+                <button class="btn btn-primary" id="btnRunAll">🚀 开始自动投稿</button>
+              </div>
+            </div>
+            <div class="run-progress" id="runProgress" hidden>
+              <div class="run-progress-text">
+                <span class="run-step" id="runStepText">准备中…</span>
+                <span class="t-dim" id="runCountText"></span>
+              </div>
+              <div class="run-bar"><i id="runBarFill" style="width:0%"></i></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="toolbar">
+              <select id="fEntry">
+                <option value="">全部入口</option>
+              </select>
+              <select id="fStatus">
+                <option value="">全部状态</option>
+                <option value="ready">待投稿</option>
+                <option value="queued">排队中</option>
+                <option value="running">投稿中</option>
+                <option value="done">成功</option>
+                <option value="previewed">预览通过</option>
+                <option value="error">失败</option>
+              </select>
+              <input id="fSearch" type="text" placeholder="🔍 搜索书名…">
+            </div>
+            <div class="task-list-head">
+              <b id="taskCount">任务列表（0）</b>
+              <span class="t-dim" id="taskStat"></span>
+            </div>
+            <div class="task-cards" id="taskCards"></div>
+          </div>
+        </section>
+
+        <!-- 短篇投稿（功能预留） -->
+        
+
+        <!-- 收益数据 -->
+        <section class="page" id="page-revenue">
+          <div class="page-head">
+            <div>
+              <h1>收益数据</h1>
+              <p class="page-sub">数据每日约 13:30 自动同步，在读与收益均按书汇总统计 · <span id="revUpdated"></span></p>
+            </div>
+            <div class="page-head-actions">
+              <button class="btn btn-ghost" id="btnRefreshRev">↻ 刷新收益</button>
+              <button class="btn btn-ghost" id="btnExport">⬇ 导出 CSV</button>
+            </div>
+          </div>
+
+          <div id="revBody"></div>
+
+          <div id="revDataArea" hidden>
+            <div class="stat-grid cols3">
+              <div class="stat-card">
+                <div class="stat-label">在读总数</div>
+                <div class="stat-value" id="stSumReaders">—</div>
+                <div class="stat-delta" id="stSumReadersDelta">—</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">作品数</div>
+                <div class="stat-value" id="stTodayReaders">—</div>
+                <div class="stat-delta" id="stTodayReadersSub">—</div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">最新日收益</div>
+                <div class="stat-value" style="color:var(--green-dark)">+¥<span id="stNewReaders">—</span></div>
+                <div class="stat-delta" id="stNewReadersSub">—</div>
+              </div>
+            </div>
+
+            <div class="stat-grid cols3" style="margin-top:14px">
+              <div class="stat-card">
+                <div class="stat-label" id="stRevDiffLabel">近 7 日收益</div>
+                <div class="stat-value"><span class="rmb">¥</span><span id="stDayRev">—</span></div>
+                <div class="stat-delta"><span id="stRevDiffPrev">—</span> · <span id="stRevDiffWow" class="stat-delta up">—</span></div>
+              </div>
+              <div class="stat-card">
+                <div class="stat-label">累计总收益</div>
+                <div class="stat-value"><span class="rmb">¥</span><span id="stTotalRev">—</span></div>
+                <div class="stat-delta" id="stTotalRevSub">—</div>
+              </div>
+            </div>
+
+            <div class="card" style="margin-top:18px">
+              <div class="card-head">
+                <h3>收益趋势</h3>
+                <div class="chip-row" id="revScaleBar"></div>
+              </div>
+              <div class="chart" id="revChart"></div>
+            </div>
+
+            <div class="card table-card">
+              <div class="card-head">
+                <h3>月度统计</h3>
+                <span class="t-dim">每月收益 · 月末在读</span>
+              </div>
+              <div id="revMonthlyTable"></div>
+            </div>
+
+            <div class="card table-card">
+              <div class="card-head">
+                <h3>分组汇总</h3>
+                <div class="chip-row" id="revGroupBar"></div>
+              </div>
+              <div id="revGroupTable"></div>
+            </div>
+
+            <div class="card table-card">
+              <div class="card-head">
+                <h3>单书明细</h3>
+                <span class="t-dim">按收益排序 · 忽略的书沉底，仍计入统计</span>
+              </div>
+              <table class="table">
+                <thead>
+                  <tr><th>书名</th><th>状态</th><th>频道·篇幅</th><th style="text-align:right">字数</th><th style="text-align:right">日收益</th><th style="text-align:right">在读(变化)</th><th style="text-align:right">累计收益</th><th style="text-align:right">近7日</th><th>首个数据日</th><th style="width:90px">操作</th></tr>
+                </thead>
+                <tbody id="bookRevBody"></tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 封面生成 -->
+        <section class="page" id="page-cover">
+          <div class="page-head">
+            <div>
+              <h1>封面生成</h1>
+              <p class="page-sub">AI 绘图工作台：配置参数一键批量生成小说封面</p>
+            </div>
+          </div>
+
+          <div class="cover-layout">
+            <!-- 左：配置面板 -->
+            <div class="card cover-config">
+              <div class="card-head cover-head">
+                <div class="cover-head-title">
+                  <span class="cover-head-icon">🖼</span>
+                  <h3>封面生成配置</h3>
+                </div>
+                <button class="btn btn-ghost btn-sm" id="btnCoverHistory">🕘 生成历史</button>
+              </div>
+
+              <div class="cfg-label-row"><span class="cfg-label">从已有小说快速导入</span><span class="cfg-optional">选填</span></div>
+              <div class="import-card" id="importCard">
+                <span class="import-icon">📖</span>
+                <span class="import-text"><b>点击选择已有小说快速导入</b><i>自动填入书名与简介，支持搜索与最近作品</i></span>
+                <span class="import-arrow">›</span>
+                <div class="import-pop" id="importPop" hidden>
+                  <input id="importSearch" type="text" placeholder="🔍 搜索书名…">
+                  <div class="import-list" id="importList"></div>
+                </div>
+              </div>
+
+              <div class="cfg-grid2">
+                <div class="field">
+                  <div class="cfg-label-row"><label class="cfg-label">小说书名 <em>*</em></label><span class="cfg-count" id="cTitleCount">0/30</span></div>
+                  <input id="cTitle" maxlength="30" type="text" placeholder="输入小说书名，例如：《诡秘之主》">
+                </div>
+                <div class="field">
+                  <div class="cfg-label-row"><label class="cfg-label">作者署名</label><span class="cfg-optional">选填</span></div>
+                  <input id="cAuthor" maxlength="40" type="text" placeholder="作者笔名，例如：蛙蛙大王">
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="cfg-label-row"><label class="cfg-label">封面画面描述 / 构思细节</label><span class="cfg-count" id="cDescCount">0/800</span></div>
+                <textarea id="cDesc" maxlength="800" rows="5" placeholder="用自然语言描述你期待的画面构想（例如：白发少年手持长剑伫立于冰雪山巅，背后浮现万丈光芒与浩瀚星空，唯美史诗感，8k画质…）"></textarea>
+              </div>
+
+              <div class="cfg-grid2">
+                <div class="field">
+                  <div class="cfg-label-row"><label class="cfg-label">生成模型</label><span class="cfg-optional">来自 AI设置</span></div>
+                  <select id="cModel"></select>
+                </div>
+                <div class="field">
+                  <div class="cfg-label-row"><label class="cfg-label">画面比例 / 尺寸</label></div>
+                  <select id="cSize">
+                    <option value="1024x1536" selected>2:3 默认小说封面（1024×1536）</option>
+                    <option value="768x1024">3:4（768×1024）</option>
+                    <option value="720x1280">9:16 竖屏全屏（720×1280）</option>
+                    <option value="1024x1024">1:1 方形（1024×1024）</option>
+                    <option value="1280x720">16:9 横版（1280×720）</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="field">
+                <div class="cfg-label-row"><label class="cfg-label">批量生成数量</label><span class="cfg-optional">一次生成多张以供挑选最佳效果</span></div>
+                <div class="seg" id="cBatch">
+                  <button class="seg-item active" data-n="1">1 张</button>
+                  <button class="seg-item" data-n="2">2 张</button>
+                  <button class="seg-item" data-n="3">3 张</button>
+                  <button class="seg-item" data-n="4">4 张</button>
+                </div>
+              </div>
+
+              <button class="btn btn-primary btn-block btn-lg" id="btnGenCover">✨ 一键生成</button>
+              <p class="tip">封面只通过已启用的图像 AI 生成。未配置图像供应商时，请先到「AI设置」完成配置；生成请求最多等待 10 分钟。</p>
+            </div>
+
+            <!-- 右：预览区 -->
+            <div class="card cover-preview">
+              <div class="cover-stage">
+                <div class="cover-empty" id="coverEmpty">
+                  <div class="cover-empty-icon">🖼</div>
+                  <b>封面生成预览</b>
+                  <p>在左侧配置参数并点击「一键生成」，<br>生成的封面图片将直接在此展示</p>
+                </div>
+                <div class="cover-grid" id="coverGrid" hidden></div>
+              </div>
+              <div class="cover-result-bar" id="coverResultBar" hidden>
+                <span id="coverMeta"></span>
+                <button class="btn-link" id="btnCoverClear">清空结果</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 简介书名生成 -->
+        <section class="page" id="page-text">
+          <div class="page-head">
+            <div>
+              <h1>简介书名生成</h1>
+              <p class="page-sub">为任务书生成候选书名 / 简介 / 封面提示词，点选「采用」直接写入任务</p>
+            </div>
+          </div>
+
+          <div class="split">
+            <div class="card form-card">
+              <h3 class="card-title">生成设置</h3>
+              <div class="field">
+                <label>生成类型</label>
+                <select id="gType">
+                  <option value="title">书名候选</option>
+                  <option value="intro">简介候选</option>
+                  <option value="prompt">封面提示词</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>生成模型（来自 AI设置·文本供应商）</label>
+                <select id="gModel"></select>
+              </div>
+              <div class="field">
+                <label>选择小说（从投稿任务中选取）</label>
+                <select id="gTask"></select>
+              </div>
+              <div class="field">
+                <label>候选数量</label>
+                <div class="seg seg-3" id="gCount">
+                  <button class="seg-item" data-n="2">2 个</button>
+                  <button class="seg-item active" data-n="3">3 个</button>
+                  <button class="seg-item" data-n="5">5 个</button>
+                </div>
+              </div>
+              <div class="field">
+                <label>补充要求（选填）</label>
+                <textarea id="gExtra" rows="3" placeholder="例如：书名要带「系统」关键词；简介突出逆袭爽感，200 字以内"></textarea>
+              </div>
+              <button class="btn btn-primary btn-block" id="btnGenText">✨ 生成候选</button>
+              <p class="tip">使用「AI设置」中启用的文本模型；生成候选仅供参考，采用后可在任务卡「调整」中继续修改。</p>
+            </div>
+
+            <div class="card output-card">
+              <div class="card-head">
+                <h3 id="genHead">候选结果</h3>
+                <span class="t-dim" id="genMeta" hidden></span>
+              </div>
+              <div id="genList">
+                <div class="gen-empty">选择小说并点击「生成候选」<br>生成的候选将显示在这里，点「采用」写入任务</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 运行日志 -->
+        <section class="page" id="page-logs">
+          <div class="page-head">
+            <div>
+              <h1>运行日志</h1>
+              <p class="page-sub">实时记录投稿引擎与各模块运行状态<span class="live-dot"></span>实时采集中</p>
+            </div>
+            <div class="logs-actions">
+              <button class="btn btn-ghost" id="btnLogsExport">⬇ 导出日志</button>
+              <button class="btn btn-ghost" id="btnLogsClear">🧹 清空日志</button>
+            </div>
+          </div>
+
+          <div class="card err-card">
+            <div class="card-head">
+              <h3>⚠ 错误中心<span class="err-badge" id="errCount">0</span></h3>
+              <div class="row-actions">
+                <button class="btn btn-ghost btn-sm" id="btnErrRetryAll">↻ 一键重试全部</button>
+                <button class="btn btn-ghost btn-sm" id="btnErrClear">清空</button>
+              </div>
+            </div>
+            <div id="errList"></div>
+          </div>
+
+          <div class="card logs-card">
+            <div class="toolbar">
+              <select id="logLevel">
+                <option value="">全部级别</option>
+                <option value="info">信息</option>
+                <option value="success">成功</option>
+                <option value="warn">警告</option>
+                <option value="error">错误</option>
+              </select>
+              <select id="logModule">
+                <option value="">全部模块</option>
+                <option>系统</option>
+                <option>投稿引擎</option>
+                <option>封面生成</option>
+                <option>文本生成</option>
+                <option>账号服务</option>
+              </select>
+              <input id="logSearch" type="text" placeholder="🔍 搜索日志内容…">
+              <label class="logs-autoscroll"><input type="checkbox" id="logAuto" checked> 自动滚动</label>
+            </div>
+            <div class="log-console" id="logConsole"></div>
+            <div class="log-foot" id="logMeta"></div>
+          </div>
+        </section>
+
+        <!-- AI设置 -->
+        
+
+        <!-- 账号设置 -->
+        <section class="page" id="page-account">
+          <div class="page-head">
+            <div>
+              <h1>账号设置</h1>
+              <p class="page-sub">保存与切换蛙蛙平台账号；投稿署名统一在笔名库设置</p>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>蛙蛙账号</h3>
+              <span class="badge green" id="acctBadge">—</span>
+            </div>
+            <div class="acct-sub" id="acctLoginSub">—</div>
+            <div class="sender-grid" style="grid-template-columns:1fr 1fr;margin-top:12px">
+              <div class="field">
+                <label>登录手机号</label>
+                <input id="acctPhone" type="text" placeholder="投稿时自动登录所用账号">
+              </div>
+              <div class="field">
+                <label>登录密码</label>
+                <input id="acctPassword" type="password" placeholder="留空 = 不修改已保存密码">
+              </div>
+            </div>
+            <div class="form-foot">
+              <button class="btn btn-ghost" id="btnLogout">清除登录凭据</button>
+              <button class="btn btn-primary" id="btnCredSave">保存登录凭据</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h3>多账号管理</h3>
+              <span class="t-dim">保存多个账号一键切换（切换会重置浏览器会话）</span>
+            </div>
+            <div class="sender-grid" style="grid-template-columns:1fr 1fr 1fr;align-items:end">
+              <div class="field">
+                <label>账号备注名</label>
+                <input id="acctName" type="text" placeholder="例如：主号 / 小号A">
+              </div>
+              <div class="field">
+                <label>已保存账号</label>
+                <select id="acctSelect"></select>
+              </div>
+              <div class="row-actions" style="padding-bottom:14px">
+                <button class="btn btn-ghost" id="btnAcctSave">保存当前</button>
+                <button class="btn btn-ghost" id="btnAcctSwitch">切换</button>
+                <button class="btn btn-ghost" id="btnAcctDelete">删除</button>
+              </div>
+            </div>
+          </div>
+
+        </section>
+
+      </main>
+    </div>
+  </div>
+</div>
+
+<!-- 生成历史弹窗 -->
+<div class="modal-mask" id="historyModal" hidden>
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <h3>🕘 封面生成历史</h3>
+      <button class="modal-close" id="btnHistoryClose" aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="history-list" id="historyList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 候选选择器弹窗（选标题 / 选简介 / 选封面两步式） -->
+<div class="modal-mask" id="candModal" hidden>
+  <div class="modal modal-wide">
+    <div class="modal-head">
+      <h3 id="candTitle">候选选择</h3>
+      <button class="modal-close" id="btnCandClose" aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body" id="candBody"></div>
+    <div class="modal-foot" id="candFoot"></div>
+  </div>
+</div>
+
+<!-- 新建任务弹窗 -->
+<div class="modal-mask" id="taskModal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="taskModalTitle">新建投稿任务</h3>
+      <button class="modal-close" id="btnModalClose" aria-label="关闭">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>书名</label>
+        <input id="tTitle" type="text" placeholder="请输入作品名称">
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>投稿入口</label>
+          <select id="tEntry"></select>
+        </div>
+        <div class="field">
+          <label>作品状态</label>
+          <select id="tStatus2">
+            <option>连载中</option><option>已完结</option>
+          </select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>作品分类</label>
+          <select id="tCat">
+            <option>长篇</option><option>短篇</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>作品频道</label>
+          <select id="tChannel">
+            <option>男频</option><option>女频</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>小说类目</label>
+        <div class="field-row" style="grid-template-columns:1fr 1fr 1fr">
+          <select id="tC1"></select>
+          <select id="tC2"></select>
+          <select id="tC3"></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>投稿范围</label>
+        <div class="range-row">
+          <label class="radio"><input type="radio" name="tRange" value="all" checked> 全部投稿</label>
+          <label class="radio"><input type="radio" name="tRange" value="custom"> 自定义范围</label>
+        </div>
+        <div class="range-inputs" style="margin-top:8px">第 <input id="tFrom" type="number" min="1" value="1"> 至 <input id="tTo" type="number" min="1" value="10"> 章</div>
+      </div>
+      <div class="field">
+        <label>作品标签（最多 8 个，支持自定义）</label>
+        <div class="tag-editor" id="tTagBox"></div>
+        <div id="tTagSug" style="margin-bottom:8px"></div>
+        <input id="tTagInput" type="text" placeholder="输入蛙蛙系统标签名称后回车">
+      </div>
+      <label class="check-line"><input type="checkbox" id="tDeAI"> 🧹 去AI处理（重写前 10 章降 AI 率）</label>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-ghost" id="btnCancelTask">取消</button>
+      <button class="btn btn-primary" id="btnCreateTask">确认创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- 关闭遮罩 -->
+<div class="closed-overlay" id="closedOverlay" hidden>
+  <div class="closed-box">
+    <div class="closed-frog">🐸</div>
+    <p>应用已关闭</p>
+    <button class="btn btn-primary" id="btnReopen">重新打开</button>
+  </div>
+</div>
+
+<!-- 全局加载状态条 -->
+<div class="busy-bar" id="busyBar">
+  <span class="busy-dot"></span><span id="busyText"></span>
+</div>
+
+<div class="toast-wrap" id="toastWrap"></div>
+
+<script src="backend-mock.js"></script>
+<script src="app.js"></script>
+<script src="automation.js"></script>
+<script src="studio.js"></script>
+</body>
+</html>

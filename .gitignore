@@ -1,0 +1,12 @@
+node_modules/
+dist/
+runtime/
+profiles/
+writer-data/
+tmp/
+.env*
+*.log
+__pycache__/
+*.pyc
+data/*
+!data/categories.json

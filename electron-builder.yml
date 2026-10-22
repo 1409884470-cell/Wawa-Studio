@@ -1,0 +1,65 @@
+appId: com.longliyu.unifiedstudio
+productName: 蛙蛙创作工作室
+copyright: 龙利鱼 · 本地工具，仅用于个人投稿辅助
+
+directories:
+  output: dist
+  buildResources: build
+
+# 只打包运行必需文件；用户数据（profiles/data 的任务日志小说等）不进安装包
+files:
+  - studio-main.mjs
+  - writer-client.mjs
+  - studio-policy.mjs
+  - prompt-catalog.mjs
+  - engine/*.py
+  - "!engine/test_*.py"
+  - engine/*.json
+  - runtime/**/*
+  - main.mjs
+  - auto.mjs
+  - core.mjs
+  - submission-engine.mjs
+  - automation-store.mjs
+  - automation-engine.mjs
+  - cover-prompt.mjs
+  - cover-compression.mjs
+  - packaging-ai.mjs
+  - pagination.mjs
+  - manuscript-cleaner.mjs
+  - submission-policy.mjs
+  - paths.mjs
+  - preload.cjs
+  - wawa-submit.mjs
+  - renderer/**/*
+  - scripts/**/*
+  - data/categories.json
+  - package.json
+
+# 关闭 asar：tools 需要直接以文件路径调用 PowerShell 脚本
+asar: false
+
+compression: maximum
+
+# 直接复用本地已下载的 electron 运行时，避免构建时联网拉 zip
+electronDist: node_modules/electron/dist
+
+win:
+  icon: build/icon.png
+  target:
+    - target: nsis
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: 蛙蛙创作工作室
+  installerLanguages: [zh_CN]
+  language: 2052
+  artifactName: 蛙蛙创作工作室-${version}-安装包.exe
+
+# 不做代码签名（个人工具）
+forceCodeSigning: false
