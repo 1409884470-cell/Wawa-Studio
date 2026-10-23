@@ -1,0 +1,59 @@
+name: Release 4.6.0
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: [.github/workflows/release-4.6.0.yml]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: 2b256deb33f471694c3942fd3a7736fcef3343dd
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Prepare Python
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://www.python.org/ftp/python/3.12.8/python-3.12.8-embed-amd64.zip -OutFile python-runtime.zip
+          Expand-Archive python-runtime.zip runtime
+          Set-Content runtime/python312._pth "python312.zip`n.`n..`nimport site" -Encoding ascii
+          Remove-Item -LiteralPath python-runtime.zip
+      - name: Install and test
+        shell: pwsh
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          ./runtime/python.exe engine/test_app.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Build installer
+        shell: pwsh
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          npm run dist -- --publish never
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Publish version backup
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $installer = Get-ChildItem dist -Filter '*安装包.exe' | Select-Object -First 1
+          if (-not $installer) { throw 'Installer not found' }
+          Copy-Item -LiteralPath $installer.FullName -Destination WawaStudio-4.6.0-Setup.exe
+          $digest = (Get-FileHash WawaStudio-4.6.0-Setup.exe -Algorithm SHA256).Hash.ToLower()
+          Set-Content SHA256.txt "$digest  WawaStudio-4.6.0-Setup.exe" -Encoding utf8
+          Compress-Archive -LiteralPath runtime -DestinationPath python-runtime-3.12.8.zip
+          Set-Content release-notes.txt '封面提示词仅保留基础提示词、画风提取、自定义附加；取消其他封面层及隐藏画面补充，继续由绘图 AI 绘制书名和笔名。未上传任务继续队列后使用新规则。此版本不包含账号、密钥或书稿。源码和旧版保留，便于回档。' -Encoding utf8
+          gh release view v4.6.0 --repo "$env:GITHUB_REPOSITORY" *> $null
+          if ($LASTEXITCODE -eq 0) { Write-Output 'Release already exists; keeping the backup unchanged.'; exit 0 }
+          gh release create v4.6.0 WawaStudio-4.6.0-Setup.exe SHA256.txt python-runtime-3.12.8.zip --repo "$env:GITHUB_REPOSITORY" --target 2b256deb33f471694c3942fd3a7736fcef3343dd --title "蛙蛙创作工作室 4.6.0" --notes-file release-notes.txt --latest
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
