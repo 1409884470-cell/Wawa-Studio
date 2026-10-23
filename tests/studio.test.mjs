@@ -38,7 +38,7 @@ test('pen matching never conflates identical titles and supports old submissions
 });
 test('cover keeps fixed rules and appends user text; editable prompt values are rendered literally',()=>{
  const s=buildCoverPrompt({coverExtra:'加入远山'},{title:'书名',penName:'甲',style:'卡通',channel:'女频',genre:'都市'});
- assert.ok(s.includes(COVER_FIXED));assert.ok(s.endsWith('加入远山'));assert.ok(s.includes('笔名：甲'));
+ assert.ok(s.includes("完整书名「书名」"));assert.ok(s.endsWith('加入远山'));assert.ok(s.includes('作者署名「甲」'));
  assert.equal(renderPrompt({promptTemplates:{title:'标题：{v0}'}},'title',{v0:'$&正文'}),'标题：$&正文');
  assert.equal(resubmitLimit({},'generic'),1);assert.equal(resubmitLimit({},'other'),0);
 });

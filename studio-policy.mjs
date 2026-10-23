@@ -1,15 +1,15 @@
 import crypto from 'node:crypto';
-import { COVER_MOOD, COVER_FIXED } from './cover-prompt.mjs';
+import { normalizeCoverSettings } from './cover-prompt.mjs';
 
 export const STUDIO_DEFAULTS = {
   qualityResubmits: 1, otherResubmits: 0, unknownResubmits: 0, rewriteConcurrency:3, reviewPollMinutes:10,
-  penNames: [], penMode: 'balanced', coverExtra: '', coverMood:COVER_MOOD, coverLayout:COVER_FIXED,
+  penNames: [], penMode: 'balanced', coverExtra: '',
   revenueConcurrency: 3, revenueDelayMs: 300, revenueRefreshMinutes: 0,
   excludeRejectedRevenue: true, autoSubmitCompleted: true, resumeOnStartup: false,
   submissionConcurrency: 2, submissionDailyLimit: 0, submissionGapSeconds: 0,
 };
 export function validateStudio(input) {
-  const s={...STUDIO_DEFAULTS,...input};
+  const s=normalizeCoverSettings({...STUDIO_DEFAULTS,...input});
   for(const [k,max] of Object.entries({submissionConcurrency:6,qualityResubmits:20,otherResubmits:20,unknownResubmits:20,revenueConcurrency:6,revenueDelayMs:30000,revenueRefreshMinutes:1440,submissionDailyLimit:10000,submissionGapSeconds:86400,rewriteConcurrency:6,reviewPollMinutes:1440})) {
     const n=Number(s[k]);if(!Number.isInteger(n)||n<(['submissionConcurrency','revenueConcurrency','rewriteConcurrency'].includes(k)?1:k==='reviewPollMinutes'?2:0)||n>max)throw new Error(`设置超出范围：${k}`);s[k]=n;
   }
@@ -26,8 +26,6 @@ export function validateStudio(input) {
     q.channel=String(p.channel||'');q.genre=String(p.genre||'');return q;
   });
   if(typeof s.coverExtra!=='string'||s.coverExtra.length>20000)throw new Error('附加封面提示词最多20000字');
-  if(typeof s.coverLayout!=='string'||s.coverLayout.length>20000)throw new Error('封面排版要求最多20000字');
-  if(typeof s.coverMood!=='string'||s.coverMood.length>20000)throw new Error('封面明暗与去模板要求最多20000字');
   return s;
 }
 const today=at=>new Date(at+8*3600e3).toISOString().slice(0,10);

@@ -2,7 +2,6 @@ import { renderPrompt } from './prompt-catalog.mjs';
 import { buildCoverPrompt } from './cover-prompt.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomInt } from 'node:crypto';
 import { chat } from './auto.mjs';
 
 export function parseAIObject(raw) {
@@ -179,10 +178,8 @@ export function createPackagingAI({ settings, coverDir, decodeImage, compressIma
       return v.intro.trim();
     },
     async prompt(title, analysis, style, penName) {
-      const visual = await coverText(renderPrompt(settings,"coverStyle",{v0:style,v1:JSON.stringify(analysis)}),'coverStyle','style');
-      const directions=['用人物关系表现矛盾，避免默认手持物件','关键物件与场景主导，可弱化人物','人物动态与环境形成叙事，避免居中站姿','有设计感的图形构图，明确题材符号和大号书名','主角特写与留白，动作视线依剧情确定'];
-      const scene=await coverText(renderPrompt(settings,'coverScene',{v0:title,v1:JSON.stringify(analysis),v2:directions[randomInt(directions.length)],v3:style}),'coverScene','scene');
-      return buildCoverPrompt(settings,{title,penName,channel:analysis.channel,genre:analysis.novelType.join(' / '),style:visual,scene});
+      const visual = await coverText(renderPrompt(settings,"coverStyle",{v0:title,v1:JSON.stringify(analysis)}),'coverStyle','style');
+      return buildCoverPrompt(settings,{title,penName,channel:analysis.channel,genre:analysis.novelType.join(' / '),style:visual,summary:analysis.summary,characters:analysis.characters,conflict:analysis.conflict});
     },
     async cover(prompt, size, jobId) {
       onPrompt('cover-final',prompt);

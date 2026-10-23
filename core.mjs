@@ -1,6 +1,6 @@
 import { normalizePrompts } from './prompt-catalog.mjs';
 import { STUDIO_DEFAULTS, validateStudio, fetchConcurrent } from './studio-policy.mjs';
-import { DEFAULT_COVER_TEMPLATE } from './cover-prompt.mjs';
+import { DEFAULT_COVER_TEMPLATE, normalizeCoverSettings } from './cover-prompt.mjs';
 // 蛙蛙写作自动投稿核心模块：登录、表单填写、提交（供 CLI 和 GUI 共用）
 import fs from 'node:fs';
 import { allPages } from './pagination.mjs';
@@ -30,8 +30,6 @@ const DEFAULT_SETTINGS = {
   imgApiKey: '',          // 图像 AI：Key
   imageModel: '',         // 图像 AI：模型（封面）
   coverTemplate: DEFAULT_COVER_TEMPLATE,
-  coverPrefix: '',        // 封面固定提示词（每次生成封面自动前缀）
-  coverNegative: '',      // 封面禁止提示词（每次生成封面自动附加"避免出现："）
   deaiPrompt: '',         // 去AI提示词（留空 = 内置默认：去模板词/口语化/剧情不变）
   autoRepairRejected: true,
   rewriteConcurrency: 3, // 仅精确匹配通用质量拒稿时，自动修改并复投一次
@@ -41,7 +39,7 @@ const DEFAULT_SETTINGS = {
 
 export function loadSettings() {
   try {
-    const settings={...DEFAULT_SETTINGS,...JSON.parse(fs.readFileSync(SETTINGS_FILE,'utf8'))};
+    const settings=normalizeCoverSettings({...DEFAULT_SETTINGS,...JSON.parse(fs.readFileSync(SETTINGS_FILE,'utf8'))});
     settings.promptTemplates=normalizePrompts(settings.promptTemplates);
     settings.penNames=(settings.penNames||[]).map(p=>({...p}));
     if(!settings.penLibraryVersion){

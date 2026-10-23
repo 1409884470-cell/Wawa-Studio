@@ -5,7 +5,7 @@ import { atomicJSON } from './automation-store.mjs';
 import { penStats } from './studio-policy.mjs';
 import { aiPing, imageAiPing } from './auto.mjs';
 import { PROMPTS } from './prompt-catalog.mjs';
-import { buildCoverPrompt } from './cover-prompt.mjs';
+import { buildCoverPrompt, DEFAULT_COVER_TEMPLATE } from './cover-prompt.mjs';
 
 export function attachStudio({app,ipcMain,dialog,root,userPath,getAutomation,loadSettings,saveSettings,send,loadCredentials}) {
   const writer=new WriterClient(root,userPath('writer-data'));
@@ -49,7 +49,7 @@ export function attachStudio({app,ipcMain,dialog,root,userPath,getAutomation,loa
         return {ok:true,data:{...snap,automation:q,enabled:state.enabled,links:state.links,error:state.error,
           pens:loadSettings().penNames.map(p=>({...p,...penStats(p,q.jobs)}))}};
       }
-      if(method==='settings')return {ok:true,data:{settings:loadSettings(),writer:await writer.call('config'),defaults:await writer.call('defaults'),prompts:PROMPTS,labels:JSON.parse(fs.readFileSync(path.join(root,'engine','prompt-labels.json'),'utf8'))}};
+      if(method==='settings')return {ok:true,data:{settings:loadSettings(),writer:await writer.call('config'),defaults:await writer.call('defaults'),prompts:PROMPTS,coverDefault:DEFAULT_COVER_TEMPLATE,labels:JSON.parse(fs.readFileSync(path.join(root,'engine','prompt-labels.json'),'utf8'))}};
       if(method==='prompt-usage'){
         const [kind,key]=String(data.id||'').split(':');let usage={};
         if(kind==='writer')usage=await writer.call('prompt-usage');
@@ -60,11 +60,11 @@ export function attachStudio({app,ipcMain,dialog,root,userPath,getAutomation,loa
         const [kind,key]=String(data.id||'').split(':');if(typeof data.value!=='string'||data.value.length>20000)throw new Error('提示词最多20000字');
         if(kind==='writer'){const defaults=await writer.call('defaults');if(!Object.hasOwn(defaults.prompts,key))throw new Error('未知写作提示词');await writer.call('save-config',{prompts:{[key]:data.value}});}
         else if(kind==='post'){if(!Object.hasOwn(PROMPTS,key))throw new Error('未知投稿提示词');saveSettings({promptTemplates:{...loadSettings().promptTemplates,[key]:data.value}});}
-        else if(kind==='setting'&&['coverTemplate','coverLayout','coverMood','coverExtra','deaiPrompt'].includes(key))saveSettings({[key]:data.value});
+        else if(kind==='setting'&&['coverTemplate','coverExtra','deaiPrompt'].includes(key))saveSettings({[key]:data.value});
         else throw new Error('未知提示词');
         const q=getAutomation(),result=data.apply&&kind!=='writer'?q.applyPrompt(key):{updated:0,skipped:0};if(result.updated&&!q.store.state.paused)void q.pump();return {ok:true,data:result};
       }
-      if(method==='cover-preview')return {ok:true,data:buildCoverPrompt({...loadSettings(),...data},{title:'示例小说',penName:'示例笔名',channel:'女频',genre:'都市',style:'清新人物插画',scene:'示例：主角侧身拆开关键来信，窗边自然光照亮人物，背景仅保留简洁的旧书店轮廓。实际生成按每本书的剧情分析变化。'})};
+      if(method==='cover-preview')return {ok:true,data:buildCoverPrompt({...loadSettings(),...data},{title:'示例小说',penName:'示例笔名',channel:'女频',genre:'都市',style:'示例：清透水彩与留白构图（实际使用本书画风提取结果）',summary:'主角为旧城居民追回失物',characters:'年轻修表师',conflict:'在拆迁前找到失物主人'})};
       if(method==='start'){
         state.enabled=true;save();delete state.error;
         const snapshot=await writer.call('snapshot');

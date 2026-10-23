@@ -271,7 +271,7 @@ export class AutomationQueue {
     const keys = image ? ['imgApiBaseUrl', 'imageModel'] : ['apiBaseUrl', 'textModel'];
     const secret = image ? 'imgApiKey' : 'apiKey';
     if (!current[secret] || keys.some(k => !current[k])) throw new Error(`请在模型设置中配置${image ? '图像' : '文本'} AI，再重试`);
-    return { ...j.settings, ...Object.fromEntries(['apiBaseUrl','apiKey','textModel','imgApiBaseUrl','imgApiKey','imageModel','coverTemplate','coverExtra','coverMood','coverLayout','promptTemplates','coverPrefix','coverNegative','deaiPrompt'].map(k => [k, current[k]])) };
+    return { ...j.settings, ...Object.fromEntries(['apiBaseUrl','apiKey','textModel','imgApiBaseUrl','imgApiKey','imageModel','coverTemplate','coverExtra','promptTemplates','deaiPrompt'].map(k => [k, current[k]])) };
   }
   async site(j, operation) {
     if (!this.getAccount() || accountKey(this.getAccount()) !== j.account) throw new Error('投稿账号未配置或已切换，请恢复导入时的账号后重试');
@@ -434,7 +434,7 @@ export class AutomationQueue {
         if (j.storyType === 'short' && j.entry === '普通投稿') throw new Error('短篇不能使用普通投稿，请选择适用活动');
         break;
       }
-      case 'prompt': j.prompt ??= await ai().prompt(j.title, j.analysis, s.coverStyle, j.settings.penName); break;
+      case 'prompt': j.prompt ??= await ai().prompt(j.title, j.analysis, '', j.settings.penName); break;
       case 'cover': j.cover ??= await ai(true).cover(j.prompt, s.imageSize, j.coverRevision?`${j.id}-v${j.coverRevision}`:j.id); break;
       case 'check': {
         validateAnalysis(j.analysis, j.catalog);

@@ -42,7 +42,7 @@ test('mixed tags are cleaned without another request, all-invalid tags use bound
  await assert.rejects(bad.repairTags({...analysis,tags:[]},site),/两次/);assert.equal(attempts,2);
 });
 test('every packaging prompt override reaches the actual request, with conditional stages tested explicitly',async()=>{
- const templates=Object.fromEntries(['analysis','score','title','intro','coverStyle','coverScene','entry','rewrite'].map(k=>[k,k+'-CUSTOM {v0} {v1} {v2} {v3}']));const seen=[];
+ const templates=Object.fromEntries(['analysis','score','title','intro','coverStyle','entry','rewrite'].map(k=>[k,k+'-CUSTOM {v0} {v1} {v2} {v3}']));const seen=[];
  const ai=createPackagingAI({settings:{promptTemplates:templates},ask:async msgs=>{
   const prompt=msgs.at(-1).content;seen.push(prompt);const k=prompt.split('-CUSTOM')[0];
   return k==='rewrite'?'修订正文'.repeat(30):JSON.stringify({analysis,score:{scores:{contentFit:20,hook:45,genre:10,readability:15,distinctive:10},reason:'理由'},title:{title:'新书名'},intro:{intro:'主角追查旧城事件，最终找回失物，解开往日谜团。'},coverStyle:{style:'插画'},coverScene:{scene:'主角在阳光下拆开来信'},entry:{name:'征文',confidence:95}}[k]);

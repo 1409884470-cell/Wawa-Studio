@@ -1,6 +1,6 @@
 {
   "name": "wawa-unified-studio",
-  "version": "4.5.2",
+  "version": "4.6.0",
   "description": "批量写作、自动投稿与笔名收益管理",
   "type": "module",
   "main": "main.mjs",

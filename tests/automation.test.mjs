@@ -329,7 +329,7 @@ test('old keyword-only inspection warning is re-cleaned on retry',async t=>{
 
 test('refresh-cover keeps text artifacts, uses current mood, and does not reuse the old image cache',async t=>{
  const f=setup(t);const j=await f.importBook();j.analysis=structuredClone(analysis);j.prompt='旧提示';j.intro='已确认简介';j.titleScore=88;j.cover='旧封面';j.stage='cover';f.queue.pause();
- f.settings({coverMood:'清亮暖色，自定义光线'});assert.equal(f.queue.settings(j).coverMood,'清亮暖色，自定义光线');
+ f.settings({coverExtra:'清亮暖色，自定义光线'});assert.equal(f.queue.settings(j).coverExtra,'清亮暖色，自定义光线');
  f.queue.control(j.id,'refresh-cover');assert.equal(j.stage,'prompt');assert.equal(j.prompt,undefined);assert.equal(j.intro,'已确认简介');assert.equal(j.titleScore,88);
  await f.queue.step(j);j.stage='cover';let key;f.ai.cover=async(p,s,id)=>{key=id;return 'new.png';};await f.queue.step(j);assert.equal(key,j.id+'-v1');
  j.remote={sid:1};assert.throws(()=>f.queue.control(j.id,'refresh-cover'),/远端/);
@@ -338,7 +338,7 @@ test('refresh-cover keeps text artifacts, uses current mood, and does not reuse 
 test('applying a saved cover prompt invalidates only local cover artifacts and skips active or remote jobs',async t=>{
  const f=setup(t);const j=await f.importBook();j.analysis=structuredClone(analysis);j.stage='check';j.prompt='cached';j.cover='cached.png';j.intro='keep';j.titleScore=90;j.scores=[{title:'keep',total:90}];
  const active=structuredClone(j);active.id='active';const remote=structuredClone(j);remote.id='remote';remote.remote={sid:3};f.queue.store.state.jobs.push(active,remote);f.queue.active.add('active');
- assert.deepEqual(f.queue.applyPrompt('coverScene'),{updated:1,skipped:2});assert.equal(j.stage,'prompt');assert.equal(j.prompt,undefined);assert.equal(j.intro,'keep');assert.equal(j.scores.length,1);assert.equal(remote.cover,'cached.png');
+ assert.deepEqual(f.queue.applyPrompt('coverStyle'),{updated:1,skipped:2});assert.equal(j.stage,'prompt');assert.equal(j.prompt,undefined);assert.equal(j.intro,'keep');assert.equal(j.scores.length,1);assert.equal(remote.cover,'cached.png');
  f.queue.applyPrompt('score');assert.equal(j.stage,'title');assert.deepEqual(j.scores,[]);assert.equal(j.intro,undefined);
 });
 test('old title scores are reassessed using the new rubric and keep the writer naming style',async t=>{

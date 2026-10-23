@@ -13,7 +13,6 @@ export function atomicJSON(file, value) {
 
 export const DEFAULT_SCHEME = {
   name: '默认自动包装', introStyle: '根据内容分析选择，突出真实冲突，保留悬念，不剧透结局',
-  coverStyle: '根据小说题材选择画风，竖版，清晰书名与作者署名',
   storyRule: 'words', longThreshold: 20000, entry: 'auto', finished: 'analysis',
   destination: 'submit', imageSize: '1024x1536', autoStart: true, concurrency: 1,
   retries: 2, titleAttempts: 2,
@@ -23,6 +22,7 @@ export const DEFAULT_SCHEME = {
 
 export function validScheme(input = {}) {
   const s = { ...DEFAULT_SCHEME, ...input, titleAttempts: 2 };
+  delete s.coverStyle;
   for (const [key, choices] of Object.entries({ storyRule: ['words', 'analysis', 'long', 'short'],
     finished: ['analysis', 'finished', 'serial'], destination: ['package', 'library', 'submit'],
     imageSize: ['1024x1536', '768x1024', '720x1280', '1024x1024', '1280x720'], firstSubmitMode: ['minimum','count','all'] })) {
@@ -32,7 +32,7 @@ export function validScheme(input = {}) {
     if (!Number.isInteger(Number(s[key])) || Number(s[key]) < min || Number(s[key]) > max) throw new Error(`包装方案数值无效：${key}`);
     s[key] = Number(s[key]);
   }
-  for (const k of ['name', 'introStyle', 'coverStyle', 'entry']) {
+  for (const k of ['name', 'introStyle', 'entry']) {
     if (typeof s[k] !== 'string' || !s[k].trim() || s[k].length > 2000) throw new Error(`包装方案内容无效：${k}`);
     s[k] = s[k].trim();
   }
@@ -61,6 +61,16 @@ export function openStore(file) {
   state.schemes = state.schemes.map(s => validScheme(s));
   // 已上传任务保持其原有的整本范围，不能把已存在的远端作品按新默认范围解释。
   for (const j of state.jobs) j.scheme = validScheme({ firstSubmitMode:'all',completeAfterContract:false,...j.scheme });
+  if(state.coverPromptSchemeVersion!==3){
+    for(const j of state.jobs){
+      if(!j.prompt||j.remote||j.uploadIntent||j.repairSource||['done','canceled'].includes(j.status)||!['prompt','cover','check','upload'].includes(j.stage))continue;
+      for(const key of ['prompt','cover','remoteCover','cfg','result'])delete j[key];
+      if(j.artifacts)delete j.artifacts.package;
+      j.coverRevision=(j.coverRevision||0)+1;j.stage='prompt';j.status='queued';j.error=null;
+      j.history??=[];j.history.push({at:new Date().toISOString(),stage:'prompt',result:'updated',message:'封面升级为基础、画风、自定义三项，继续队列后重做本地封面'});
+    }
+    state.coverPromptSchemeVersion=3;
+  }
   // 重启保留断点，由“继续队列”恢复，避免重启时意外发起付费请求或投稿。
   state.paused = true;
   return { state, save: () => atomicJSON(file, state) };

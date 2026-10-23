@@ -27,9 +27,8 @@
         <label>首投最低有效字数<input id="aqFirstMinWords" type="number" min="20000" max="10000000"></label>
         <label class="aq-check"><input id="aqCompleteAfterContract" type="checkbox">确认已签约后自动补传剩余章节</label>
         <label class="aq-wide">简介风格<textarea id="aqIntroStyle" rows="2" maxlength="2000"></textarea></label>
-        <label class="aq-wide">本批封面偏好（可留空，由剧情决定）<textarea id="aqCoverStyle" rows="2" maxlength="2000"></textarea></label>
       </div>
-      <div class="aq-rule"><b>封面提示词</b><span>基础要求 + 本书剧情画面 + 明亮去模板要求 + 自定义补充。每本书单独分析。</span><button data-prompt-open="post:coverScene">设置封面提示词</button></div><div class="aq-rule"><b>书名自动评分</b><span>原名 ≥80 分沿用；最多再生成2次，仍不足80分则采用最高分合法书名。吸引力占45分。</span></div>
+      <div class="aq-rule"><b>封面提示词</b><span>基础提示词 + 本书画风 + 自定义附加。</span><button data-prompt-open="setting:coverTemplate">设置封面提示词</button></div><div class="aq-rule"><b>书名自动评分</b><span>原名 ≥80 分沿用；最多再生成2次，仍不足80分则采用最高分合法书名。吸引力占45分。</span></div>
       <div class="aq-rule"><b>首投正常正文</b><span>全文先入仓，仅提交指定首投章节，部分投稿保持连载状态。按有效正文计数；不足50字的章节不上传。拒稿修订开关在“自动流程”设置中。</span></div>
       <div class="aq-rule"><b>笔名：<span id="aqPenName">未设置</span></b><span>从设置读取，自动加入投稿署名和封面绘画提示词。</span><button data-settings-open="pens">设置笔名</button><button data-settings-open="ai">模型设置</button></div>
       <details class="aq-advanced"><summary>执行设置</summary><div class="aq-form">
@@ -42,7 +41,7 @@
     </div>
     <div class="aq-panel"><div class="aq-panel-head"><div><h2>自动任务</h2><span id="aqQueueState"></span></div><div class="aq-actions"><select id="aqFilter" aria-label="筛选任务">${opts([['all','全部任务'],['attention','需要处理'],['blocked','拒稿待处理'],['watching','跟踪审核'],['running','执行中'],['queued','等待执行'],['waiting','等待笔名/额度'],['done','已完成'],['canceled','已停止']])}</select><label><input type="checkbox" id="aqSelectAll"> 全选</label><button id="aqBatchDelete">批量删除</button><button id="aqSyncReview">检查审核</button><button id="aqPause">暂停队列</button><button id="aqResume" class="aq-primary">继续队列</button></div></div><div id="aqJobs"></div></div>`;
   const $ = id => document.getElementById(id);
-  const fields = ['name','introStyle','coverStyle','storyRule','longThreshold','entry','finished','destination','imageSize','autoStart','retries','titleAttempts','firstSubmitMode','firstChapterCount','firstMinChapters','firstMaxChapters','firstMinWords','completeAfterContract'];
+  const fields = ['name','introStyle','storyRule','longThreshold','entry','finished','destination','imageSize','autoStart','retries','titleAttempts','firstSubmitMode','firstChapterCount','firstMinChapters','firstMaxChapters','firstMinWords','completeAfterContract'];
   const fid = key => 'aq' + key[0].toUpperCase() + key.slice(1);
   const message = (text, bad = false) => { for(const id of ['aqMessage','aqRecordsMessage']){const box=$(id);if(box){box.textContent=text;box.classList.toggle('aq-bad',bad);}} const d = document.querySelector('.aq-dialog[open]'); if (d && bad) { let n = d.querySelector('.aq-dialog-error'); if (!n) { n = document.createElement('p'); n.className = 'aq-error aq-dialog-error'; d.prepend(n); } n.textContent = text; d.scrollTop = 0; } };
   const run = fn => async (...args) => { try { await fn(...args); } catch(e) { message(e.message || String(e), true); } };
