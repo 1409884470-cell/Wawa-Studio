@@ -1,3 +1,4 @@
+import { hideSubmissionRecord } from './library-state.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -49,7 +50,7 @@ export function openStore(file) {
     if (state.version !== 1 || !Array.isArray(state.jobs) || !Array.isArray(state.schemes)) throw new Error('自动任务数据格式异常，请保留文件并恢复备份');
   }
   for (const j of state.jobs) {
-    if(j.deleteRequested){j.status='canceled';j.hidden=true;delete j.deleteRequested;}
+    if(j.deleteRequested)hideSubmissionRecord(j);
     else if (['running','importing'].includes(j.status)) j.status = 'queued';
   }
   // 一次性升级旧默认尺寸，保留已生成封面；升级后仍可手选其他比例。

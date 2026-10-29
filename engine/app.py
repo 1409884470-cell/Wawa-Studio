@@ -272,6 +272,7 @@ def persist(book):
             book.update(status='pausing',phase=current.get('phase','正在保存并暂停'))
         book['updated_at']=stamp()
         atomic_json(project_dir(book['id'])/'meta.json', book)
+        if book.get('archived'):return
         complete = [c for c in book.get('chapters', []) if c.get('status') == 'completed']
         update_item(book['id'], status=book['status'], completed_chapters=len(complete),
                     total_words_actual=sum(c.get('words', 0) for c in complete),
@@ -323,6 +324,9 @@ def initialize():
                 q['items'].append({k: v for k, v in d.items() if k not in ('chapters', 'bible', 'story_state')})
                 known.add(path.parent.name)
         for item in q['items']:
+            saved=read_json(project_dir(item['id'])/'meta.json',{})
+            if saved.get('version')==VERSION and saved.get('status')=='completed':
+                item.update(status='completed',phase='已完稿',completed_chapters=sum(c.get('status')=='completed' for c in saved.get('chapters',[])),total_words_actual=completed_words(saved))
             if item.get('version') != VERSION:
                 item.update(status='needs_review', phase='旧版书稿', error='旧版内容尚未经连续性校验；可阅读或复制为新版项目重新生成。')
                 item['existing_chapters']=len(list((project_dir(item['id'])/'chapters').glob('*.txt')))
@@ -719,6 +723,11 @@ def library_entries():
             owned.add(pid)
             count=sum(c.get('status')=='completed' for c in b.get('chapters',[]))
             if not count:continue
+            # A legacy archive action changed completed books to paused. Restore only
+            # an existing full export with every chapter still verified.
+            if b.get('archived') and b.get('status')!='completed' and b.get('export_file') and count==b.get('chapter_count') and (EXPORTS/b['export_file']).is_file():
+                if all(chapter_path(pid,c['chapter_num']).is_file() and digest(chapter_path(pid,c['chapter_num']).read_text(encoding='utf-8'))==c.get('content_hash') for c in b['chapters']):
+                    b.update(status='completed',phase='已完稿');atomic_json(path,b)
             full=b.get('export_file') if b.get('status')=='completed' else ''
             if full and not (EXPORTS/full).is_file():full=''
             result.append({'id':pid,'book_name':b['book_name'],'status':b.get('status'),'archived':bool(b.get('archived')),'kind':'full' if full else 'opening' if count==min(polish_count(b),b['chapter_count']) else 'progress',
@@ -733,7 +742,8 @@ def library_entries():
 def remove_book(pid,erase=False):
     """Only called while this project has no worker; keep recoverable data."""
     with LOCK:
-        b=meta(pid);b.update(archived=True,status='paused',phase='已移出队列')
+        b=meta(pid);b['archived']=True
+        if b.get('status')!='completed':b.update(status='paused',phase='已移出队列')
         b.pop('remove_requested',None)
         atomic_json(project_dir(pid)/'meta.json',b)
         if erase:
@@ -1135,6 +1145,11 @@ def save_chapter(pid,n,content):
             if ch['chapter_num']>=n: ch.update(status='pending',words=0)
         c['status']='review'
         archive_export(b)
+        if b.get('archived'):
+            b['archived']=False
+            q=queue()
+            if not any(i['id']==pid for i in q['items']):q['items'].append({k:v for k,v in b.items() if k not in ('chapters','bible','story_state')})
+            atomic_json(CONFIG/'queue.json',q)
         b.update(status='paused',export_file='',phase='正文已修改，需重新校验后续章节')
         PIPELINE.reconcile(b)
 

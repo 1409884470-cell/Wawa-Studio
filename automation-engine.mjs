@@ -1,3 +1,4 @@
+import { hideSubmissionRecord } from './library-state.mjs';
 import { choosePen, penStats, resubmitLimit } from './studio-policy.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -70,7 +71,7 @@ export class AutomationQueue {
     if(action==='delete'&&this.active.has(id)){j.deleteRequested=true;this.save();return;}
     if (this.active.has(id)) throw new Error('当前步骤执行中，请暂停并等本步骤结束');
     if (action === 'delete') {
-      if(j.remote||j.uploadIntent||j.penId){j.status='canceled';j.hidden=true;}else this.store.state.jobs = this.store.state.jobs.filter(x => x.id !== id); this.save(); return;
+      hideSubmissionRecord(j); this.save(); return;
     }
     if(action==='source-title'){
       if(j.remote||j.uploadIntent||j.repairSource)throw new Error('已有远端记录，不能修改原始书名');
@@ -264,7 +265,7 @@ export class AutomationQueue {
     } catch (e) {
       j.status = e.waiting ? 'waiting' : 'attention'; if(e.waiting)j.retryAt=Date.now()+60000; j.error = { stage: j.stage, message: String(e.message || e), at: now() };
       j.history.push({ ...j.error, result: 'failed' });
-    } finally { if(j.deleteRequested){j.status='canceled';j.hidden=true;delete j.deleteRequested;}this.active.delete(j.id); this.save(); }
+    } finally { if(j.deleteRequested)hideSubmissionRecord(j);this.active.delete(j.id); this.save(); }
   }
   settings(j, image = false) {
     const current = this.getSettings();
@@ -546,7 +547,7 @@ export class AutomationQueue {
           const chapters = await r.apiStructure(j.remote.baseId);
           if (chapters.length !== this.uploadChapters(j).length) throw new Error('入库章节数量异常，请核对');
           if (s.destination === 'submit' && chapters.slice(0,j.plan.count).some(c => !c.is_submitted)) throw new Error('站点尚未确认所有章节提交成功，请稍后重试核对');
-          j.remoteConfirmedAt = now(); j.result = s.destination === 'submit' ? `首投${j.plan.count}章 / ${j.plan.words}字已提交，等待审核` : '已入库（投稿草稿）';
+          j.remoteConfirmedAt = now(); if(s.destination==='submit')j.submittedAt=j.remoteConfirmedAt; j.result = s.destination === 'submit' ? `首投${j.plan.count}章 / ${j.plan.words}字已提交，等待审核` : '已入库（投稿草稿）';
         }); break;
       }
       case 'delete-rejected': {

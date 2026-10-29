@@ -46,6 +46,23 @@ class FactoryTests(unittest.TestCase):
             app.PIPELINE.process(b['id'])
         return app.meta(b['id'])
 
+    def test_completed_book_survives_archive_and_stale_queue(self):
+        b=self.produce(self.book())
+        q=app.queue();q['items'][0]['status']='paused';app.atomic_json(app.CONFIG/'queue.json',q)
+        app.initialize()
+        self.assertEqual(app.queue()['items'][0]['status'],'completed')
+        app.remove_book(b['id'])
+        self.assertEqual(app.meta(b['id'])['status'],'completed')
+        self.assertEqual(app.library_entries()[0]['kind'],'full')
+        # Previous versions overwrote status when removing a completed queue item.
+        b=app.meta(b['id']);b['status']='paused';app.atomic_json(app.project_dir(b['id'])/'meta.json',b)
+        self.assertEqual(app.library_entries()[0]['status'],'completed')
+        self.assertEqual(app.meta(b['id'])['status'],'completed')
+        app.export_book(app.meta(b['id']))
+        self.assertEqual(len(app.queue()['items']),0)
+        app.save_chapter(b['id'],1,'新正文'*110)
+        self.assertEqual(app.queue()['items'][0]['status'],'paused')
+
     def test_auto_retry_eventually_exports_whole_book(self):
         b=self.book();calls=[]
         def output(*args,**kwargs):

@@ -1,3 +1,4 @@
+import { completedBooks, bookSubmission, submissionState } from './library-state.mjs';
 import fs from 'node:fs';
 import path from 'node:path';
 import { WriterClient } from './writer-client.mjs';
@@ -14,40 +15,86 @@ export function attachStudio({app,ipcMain,dialog,root,userPath,getAutomation,loa
   state.links??={};state.enabled=loadSettings().resumeOnStartup===true&&state.enabled;
   const save=()=>atomicJSON(file,state);
   let bridging=false;
+  const transfers=new Map();
+  function restoreSubmission(job,q){
+    // Restore the existing checkpoint; never create a second upload for a linked book.
+      if(job.hidden||job.status==='canceled'){
+        if(q.active.has(job.id)||job.deleteRequested)throw new Error('任务正在保存，请稍后再试');
+        if(job.remote||job.uploadIntent||job.repairSource||submissionState(job).group==='done'){
+          job.status=job.recordStatus==='blocked'?'blocked':'attention';
+          job.error={stage:job.stage,message:'历史记录已恢复，请核对远端状态后继续',at:new Date().toISOString()};
+        }else{job.status='queued';job.error=null;}
+        job.hidden=false;delete job.recordStatus;
+      }
+      if(job.stage==='done'&&job.scheme.destination==='package'){
+        job.scheme.destination='submit';job.stage='check';job.status='queued';job.error=null;delete job.result;
+      }
+  }
+  async function transferBook(book,manual=false){
+    if(transfers.has(book.id))return transfers.get(book.id);
+    const operation=(async()=>{
+      if(state.links[book.id]?.deleted||state.links[book.id]?.deleting)throw new Error('作品正在删除或已删除');
+      const q=getAutomation();
+      let job=bookSubmission(q.store.state.jobs,book.id);
+      if(!job){
+        const file=await writer.call('complete-export',{id:book.id});
+        if(state.links[book.id]?.deleted||state.links[book.id]?.deleting)throw new Error('作品正在删除');
+        const scheme=q.store.state.schemes.find(s=>s.name===q.store.state.defaultScheme)||q.store.state.schemes[0];
+        const result=await q.import([file],{...scheme,autoStart:false},{title:book.book_name,writerId:book.id});
+        if(result.errors.length)throw new Error(result.errors[0].error);
+        const id=result.added[0]||result.duplicates[0]?.id;if(!id)throw new Error('未创建投稿任务');
+        job=q.job(id);
+        if(job.writerId&&job.writerId!==book.id)throw new Error('该内容已被另一作品使用，已阻止重复投稿');
+        job.writerId=book.id;job.platformStyle=book.platform_style;job.titleStyle=book.title_style;job.batch=book.created_at?.slice(0,10);
+      }
+      if(state.links[book.id]?.deleted||state.links[book.id]?.deleting){q.control(job.id,'delete');throw new Error('作品正在删除');}
+      if(manual)restoreSubmission(job,q);
+      q.save();state.links[book.id]={...state.links[book.id],jobId:job.id,error:undefined};save();
+      if(!q.store.state.paused)void q.pump();
+      return {jobId:job.id};
+    })();
+    transfers.set(book.id,operation);
+    try{return await operation;}finally{transfers.delete(book.id);}
+  }
   async function connectCompleted(){
-    if(bridging||!state.enabled)return;
+    if(bridging||!state.enabled||!loadSettings().autoSubmitCompleted)return;
     bridging=true;
     try {
       const snap=await writer.call('snapshot');
-      if(!loadSettings().autoSubmitCompleted)return;
-      for(const book of snap.queue.items){
-        if(book.status!=='completed'||state.links[book.id]?.jobId||state.links[book.id]?.deleted||state.links[book.id]?.deleting)continue;
-        try {
-          const q=getAutomation();
-          const previous=q.store.state.jobs.find(j=>j.writerId===book.id);
-          if(previous){state.links[book.id]={jobId:previous.id};save();continue;}
-          const file=await writer.call('complete-export',{id:book.id});
-          if(state.links[book.id]?.deleted||state.links[book.id]?.deleting)continue;
-          const scheme=q.store.state.schemes.find(s=>s.name===q.store.state.defaultScheme)||q.store.state.schemes[0];
-          const result=await q.import([file],{...scheme,autoStart:false},{title:book.book_name,writerId:book.id});
-          if(result.errors.length)throw new Error(result.errors[0].error);
-          const id=result.added[0]||result.duplicates[0]?.id;if(!id)throw new Error('未创建投稿任务');
-          if(state.links[book.id]?.deleted||state.links[book.id]?.deleting){q.control(id,'delete');continue;}
-          const job=q.job(id);if(job.writerId&&job.writerId!==book.id)throw new Error('该内容已被另一作品使用，已阻止重复投稿');
-          job.writerId=book.id;job.platformStyle=book.platform_style;job.titleStyle=book.title_style;job.batch=book.created_at?.slice(0,10);q.save();
-          state.links[book.id]={jobId:id};save();
-          if(state.enabled&&!q.store.state.paused)q.pump();
-        }catch(e){state.links[book.id]={...state.links[book.id],error:e.message};save();}
+      for(const book of completedBooks(snap)){
+        const link=state.links[book.id];
+        if(!state.enabled||!loadSettings().autoSubmitCompleted)break;
+        if(link?.jobId||link?.deleted||link?.deleting||bookSubmission(getAutomation().store.state.jobs,book.id))continue;
+        try {await transferBook(book);}catch(e){state.links[book.id]={...state.links[book.id],error:e.message};save();}
       }
-      if(!getAutomation().store.state.paused) getAutomation().pump();
     }catch(e){state.error=e.message;send('studio-error',e.message);}finally{bridging=false;}
   }
   ipcMain.handle('studio',async(_event,{method,data={}}={})=>{
     try {
       if(method==='snapshot'){
         const snap=await writer.call('snapshot'),q=getAutomation().snapshot();
-        return {ok:true,data:{...snap,automation:q,enabled:state.enabled,links:state.links,error:state.error,
+        q.jobs=q.jobs.map(j=>({...j,libraryState:submissionState(j)}));
+        const complete=completedBooks(snap).filter(b=>!state.links[b.id]?.deleted);
+        return {ok:true,data:{...snap,completedBooks:complete,bookSubmissions:Object.fromEntries(complete.map(b=>[b.id,bookSubmission(q.jobs,b.id)||null])),autoSubmitCompleted:loadSettings().autoSubmitCompleted,automation:q,enabled:state.enabled,links:state.links,error:state.error,
           pens:loadSettings().penNames.map(p=>({...p,...penStats(p,q.jobs)}))}};
+      }
+      if(method==='submit-imports'){
+        if(!Array.isArray(data.ids)||!data.ids.length||data.ids.length>500)throw new Error('请选择已导入作品');
+        const q=getAutomation(),results=[];
+        for(const id of new Set(data.ids))try{
+          const job=q.job(id);if(job.writerId||job.libraryDeleted||!job.artifacts?.chapters)throw new Error('导入作品不存在');
+          restoreSubmission(job,q);q.save();results.push({id,success:true});
+        }catch(e){results.push({id,success:false,error:e.message});}
+        if(!q.store.state.paused)void q.pump();return {ok:true,data:results};
+      }
+      if(method==='submit-books'){
+        if(!Array.isArray(data.ids)||!data.ids.length||data.ids.length>500)throw new Error('请选择1至500本已完稿作品');
+        const snap=await writer.call('snapshot'),books=completedBooks(snap),results=[];
+        for(const id of new Set(data.ids))try{
+          const book=books.find(b=>b.id===id);if(!book)throw new Error('作品尚未完稿或已移出书库');
+          results.push({id,success:true,...await transferBook(book,true)});
+        }catch(e){results.push({id,success:false,error:e.message});}
+        return {ok:true,data:results};
       }
       if(method==='settings')return {ok:true,data:{settings:loadSettings(),writer:await writer.call('config'),defaults:await writer.call('defaults'),prompts:PROMPTS,coverDefault:DEFAULT_COVER_TEMPLATE,labels:JSON.parse(fs.readFileSync(path.join(root,'engine','prompt-labels.json'),'utf8'))}};
       if(method==='prompt-usage'){
@@ -143,7 +190,7 @@ export function attachStudio({app,ipcMain,dialog,root,userPath,getAutomation,loa
         if(data.ids.some(id=>typeof id!=='string'||! /^[a-zA-Z0-9_-]{1,120}$/.test(id)||['__proto__','constructor','prototype'].includes(id)))throw new Error('记录ID无效');
         const q=getAutomation(),results=[];
         if(data.kind==='post'){
-          for(const id of new Set(data.ids)){try{q.control(id,'delete');results.push({id,success:true});}catch(e){results.push({id,success:false,error:e.message});}}
+          for(const id of new Set(data.ids)){try{const job=q.job(id);if(data.library)job.libraryDeleted=true;q.control(id,'delete');results.push({id,success:true});}catch(e){results.push({id,success:false,error:e.message});}}
         }else{
           for(const id of new Set(data.ids)){
             const previous=state.links[id];state.links[id]={...previous,deleting:true};save();
