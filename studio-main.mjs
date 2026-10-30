@@ -29,6 +29,7 @@ export function attachStudio({app,ipcMain,dialog,root,userPath,getAutomation,loa
       if(job.stage==='done'&&job.scheme.destination==='package'){
         job.scheme.destination='submit';job.stage='check';job.status='queued';job.error=null;delete job.result;
       }
+      if(!job.remote&&!job.uploadIntent&&!job.repairSource)job.scheme.destination='submit';
   }
   async function transferBook(book,manual=false){
     if(transfers.has(book.id))return transfers.get(book.id);
@@ -50,7 +51,7 @@ export function attachStudio({app,ipcMain,dialog,root,userPath,getAutomation,loa
       if(state.links[book.id]?.deleted||state.links[book.id]?.deleting){q.control(job.id,'delete');throw new Error('作品正在删除');}
       if(manual)restoreSubmission(job,q);
       q.save();state.links[book.id]={...state.links[book.id],jobId:job.id,error:undefined};save();
-      if(!q.store.state.paused)void q.pump();
+      if(manual)q.startJobs([job.id]);else if(!q.store.state.paused)void q.pump();
       return {jobId:job.id};
     })();
     transfers.set(book.id,operation);
@@ -85,7 +86,7 @@ export function attachStudio({app,ipcMain,dialog,root,userPath,getAutomation,loa
           const job=q.job(id);if(job.writerId||job.libraryDeleted||!job.artifacts?.chapters)throw new Error('导入作品不存在');
           restoreSubmission(job,q);q.save();results.push({id,success:true});
         }catch(e){results.push({id,success:false,error:e.message});}
-        if(!q.store.state.paused)void q.pump();return {ok:true,data:results};
+        q.startJobs(results.filter(r=>r.success).map(r=>r.id));return {ok:true,data:results};
       }
       if(method==='submit-books'){
         if(!Array.isArray(data.ids)||!data.ids.length||data.ids.length>500)throw new Error('请选择1至500本已完稿作品');

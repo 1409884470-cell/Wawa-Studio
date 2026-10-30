@@ -8,11 +8,11 @@
   if (!api?.automationState) { host.innerHTML = '<p>请在 wawawa 桌面软件中使用自动包装功能。</p>'; return; }
   const opts = items => items.map(([v,t]) => `<option value="${esc(v)}">${esc(t)}</option>`).join('');
   host.innerHTML = `
-    <div class="aq-hero"><div><div class="aq-eyebrow">WAWAWA / BATCH PUBLISHING</div><h1>自动投稿中心</h1><p>导入清理 → 自动包装 → 首投 → 审核跟踪 → 签约后补齐</p></div><button id="aqImport" class="aq-primary">＋ 批量导入小说</button></div>
+    <div class="aq-hero"><div><div class="aq-eyebrow">WAWAWA / BATCH PUBLISHING</div><h1>投稿设置</h1></div><button id="aqImport" class="aq-primary">＋ 导入并执行</button></div>
     <div class="aq-notice" id="aqMessage" role="status">正在读取自动任务…</div>
     <div class="aq-stats" id="aqStats"></div>
-    <div class="aq-panel"><div class="aq-panel-head"><h2>投稿并行</h2><div class="aq-actions"><label>同时处理本数 <input id="aqGlobalConcurrency" type="number" min="1" max="6" value="2" style="width:80px"></label><button id="aqSaveConcurrency" class="aq-primary">保存并行设置</button></div></div><p>1—6 本并行包装；同账号上传依次执行。</p></div>
-    <div class="aq-panel"><div class="aq-panel-head"><h2>本批包装方案</h2><button id="aqToggleScheme">收起设置</button><div class="aq-actions"><select id="aqSchemes" aria-label="已保存方案"></select><button id="aqSave">保存方案</button><button id="aqDelete">删除方案</button></div></div>
+    <div class="aq-panel"><div class="aq-panel-head"><h2>投稿并行</h2><div class="aq-actions"><label>同时处理本数 <input id="aqGlobalConcurrency" type="number" min="1" max="6" value="2" style="width:80px"></label><button id="aqSaveConcurrency" class="aq-primary">保存并行设置</button></div></div></div>
+    <div class="aq-panel"><div class="aq-panel-head"><h2>投稿方案</h2><button id="aqToggleScheme">收起设置</button><div class="aq-actions"><select id="aqSchemes" aria-label="已保存方案"></select><button id="aqSave">保存方案</button><button id="aqDelete">删除方案</button></div></div>
       <div id="aqSchemeBody"><div class="aq-form">
         <label>方案名称<input id="aqName" maxlength="60"></label>
         <label>处理到哪一步<select id="aqDestination">${opts([['submit','自动包装并正式投稿'],['library','自动包装并上传为草稿'],['package','只生成包装，暂不上传']])}</select></label>
@@ -28,16 +28,14 @@
         <label class="aq-check"><input id="aqCompleteAfterContract" type="checkbox">确认已签约后自动补传剩余章节</label>
         <label class="aq-wide">简介风格<textarea id="aqIntroStyle" rows="2" maxlength="2000"></textarea></label>
       </div>
-      <div class="aq-rule"><b>封面提示词</b><span>基础提示词 + 本书画风 + 自定义附加。</span><button data-prompt-open="setting:coverTemplate">设置封面提示词</button></div><div class="aq-rule"><b>书名自动评分</b><span>原名 ≥80 分沿用；最多再生成2次，仍不足80分则采用最高分合法书名。吸引力占45分。</span></div>
-      <div class="aq-rule"><b>首投正常正文</b><span>全文先入仓，仅提交指定首投章节，部分投稿保持连载状态。按有效正文计数；不足50字的章节不上传。拒稿修订开关在“自动流程”设置中。</span></div>
-      <div class="aq-rule"><b>笔名：<span id="aqPenName">未设置</span></b><span>从设置读取，自动加入投稿署名和封面绘画提示词。</span><button data-settings-open="pens">设置笔名</button><button data-settings-open="ai">模型设置</button></div>
+      <div class="aq-rule"><b>笔名：<span id="aqPenName">未设置</span></b><button data-settings-open="pens">笔名库</button><button data-settings-open="ai">AI 设置</button><button data-prompt-open="setting:coverTemplate">封面提示词</button></div>
       <details class="aq-advanced"><summary>执行设置</summary><div class="aq-form">
         <label>封面尺寸<select id="aqImageSize">${opts(['1024x1536', '768x1024','720x1280','1024x1024','1280x720'].map(x=>[x,x]))}</select></label>
 
         <label>网络失败自动重试次数<input id="aqRetries" type="number" min="0" max="3"></label>
         <input id="aqTitleAttempts" type="hidden" value="2">
       </div><p>每本书通常包含分析、评分、简介、提示词等多次文本请求及1次图像请求。重新生成与网络重试可能增加费用。上传结果不明确时先核对，不自动重复创建。</p></details>
-      <label class="aq-check"><input id="aqAutoStart" type="checkbox">导入后立即按照本方案执行</label></div>
+      <input id="aqAutoStart" type="checkbox" hidden checked></div>
     </div>
     <div class="aq-panel"><div class="aq-panel-head"><div><h2>自动任务</h2><span id="aqQueueState"></span></div><div class="aq-actions"><select id="aqFilter" aria-label="筛选任务">${opts([['all','全部任务'],['attention','需要处理'],['blocked','拒稿待处理'],['watching','跟踪审核'],['running','执行中'],['queued','等待执行'],['waiting','等待笔名/额度'],['done','已完成'],['canceled','已停止']])}</select><label><input type="checkbox" id="aqSelectAll"> 全选</label><button id="aqBatchDelete">批量删除</button><button id="aqSyncReview">检查审核</button><button id="aqPause">暂停队列</button><button id="aqResume" class="aq-primary">继续队列</button></div></div><div id="aqJobs"></div></div>`;
   const $ = id => document.getElementById(id);
@@ -84,7 +82,7 @@
     const files = await api.pickFiles('novel'); if (!files.length) return;
     $('aqImport').disabled = true;
     try {
-      const r = await api.automationImport(files, readScheme()); if (!r.ok) throw new Error(r.error);
+      const r = await api.automationImport(files, {...readScheme(),autoStart:true}); if (!r.ok) throw new Error(r.error);
       if (r.added.length) { $('aqSchemeBody').hidden = true; $('aqToggleScheme').textContent = '展开设置'; }
       message(`导入 ${r.added.length} 本；重复 ${r.duplicates.length} 本；失败 ${r.errors.length} 本。${r.errors.map(x=>x.file+'：'+x.error).join('；')}`, !!r.errors.length);
     } finally { $('aqImport').disabled = false; }
@@ -153,5 +151,5 @@
   async function refreshSettings(){const [s,c]=await Promise.all([api.getSettings(),api.getCredentials()]);$('aqGlobalConcurrency').value=s.submissionConcurrency||2;$('aqPenName').textContent=`笔名库：${s.penNames?.filter(p=>p.enabled!==false).length||0}个可用`;document.querySelector('.login-status').textContent=c.has?'已配置账号（投稿时验证）':'未配置账号';document.querySelector('.login-phone').textContent=String(c.phone||'').replace(/^(\d{3})\d{4}(\d{4})$/,'$1****$2');}
   document.addEventListener('click',e=>{if(e.target.closest('[data-page="automation"]'))run(refreshSettings)();});
   api.onAutomationState(next=>{state=next;renderSchemes();render();});
-  run(async()=>{[state,library]=await Promise.all([api.automationState(),api.getSiteData()]);defaults=state.schemes.find(s=>s.name===state.defaultScheme)||state.schemes[0]||{name:'默认自动包装',introStyle:'贴合内容，突出冲突，保留悬念',coverStyle:'根据小说内容选择，竖版，清晰书名与作者署名',storyRule:'words',longThreshold:20000,entry:'auto',finished:'analysis',destination:'submit',imageSize:'1024x1536',autoStart:true,concurrency:1,retries:2,titleAttempts:2};$('aqEntry').innerHTML=opts([['auto','根据内容匹配（长篇默认普通投稿）'],...(library.entries||[]).map(e=>[e,e])]);renderSchemes();fillScheme(defaults);$('aqSchemes').value=defaults.name;render();await refreshSettings();message('选择包装方案后批量导入。正常稿件自动完成，只有异常需要处理；重启后点击“继续队列”接着执行。');})();
+  run(async()=>{[state,library]=await Promise.all([api.automationState(),api.getSiteData()]);defaults=state.schemes.find(s=>s.name===state.defaultScheme)||state.schemes[0]||{name:'默认自动包装',introStyle:'贴合内容，突出冲突，保留悬念',coverStyle:'根据小说内容选择，竖版，清晰书名与作者署名',storyRule:'words',longThreshold:20000,entry:'auto',finished:'analysis',destination:'submit',imageSize:'1024x1536',autoStart:true,concurrency:1,retries:2,titleAttempts:2};$('aqEntry').innerHTML=opts([['auto','根据内容匹配（长篇默认普通投稿）'],...(library.entries||[]).map(e=>[e,e])]);renderSchemes();fillScheme(defaults);$('aqSchemes').value=defaults.name;render();await refreshSettings();message('');})();
 })();

@@ -64,7 +64,11 @@ export class AutomationQueue {
     if (scheme.autoStart && added.length) this.resume();
     return { added, duplicates, errors };
   }
-  pause() { this.store.state.paused = true; this.save(); }
+  startJobs(ids) {
+    for(const id of ids){const j=this.job(id);if(j.status==='queued'&&!j.hidden)j.requestedStart=true;}
+    this.save();void this.pump();
+  }
+  pause() { this.store.state.paused = true;for(const j of this.store.state.jobs)delete j.requestedStart;this.save(); }
   resume() { this.store.state.paused = false; this.save(); this.pump(); }
   control(id, action, patch) {
     const j = this.job(id);
@@ -106,7 +110,7 @@ export class AutomationQueue {
       Object.assign(j,{stage:'inspect',status:'queued',error:null,attempts:{},scores:[],artifacts:{},overrides:{}});
       for(const k of ['analysis','intro','prompt','cover','cfg','pendingTitle','titleScore','remoteCover','plan','warningsApproved','analysisApproved','sourceIntro'])delete j[k];
     }
-    else if (action === 'cancel') { j.status = 'canceled'; }
+    else if (action === 'cancel') { j.status = 'canceled';delete j.requestedStart; }
     else if (action === 'retry' || action === 'review') {
       if (j.status === 'done') throw new Error('已完成任务不能重新投稿');
       if (action === 'review') {
@@ -227,12 +231,12 @@ export class AutomationQueue {
     this.running = true; this.save();
     try {
       const inFlight=new Set();
-      while (!this.store.state.paused || inFlight.size) {
+      while (!this.store.state.paused || inFlight.size || this.store.state.jobs.some(j=>j.requestedStart&&j.status==='queued')) {
         for(const j of this.store.state.jobs)if(j.status==='waiting'&&(!j.retryAt||j.retryAt<=Date.now()))j.status='queued';
-        const pending=this.store.state.jobs.filter(j=>j.status==='queued'&&!j.hidden&&!this.active.has(j.id));
+        const pending=this.store.state.jobs.filter(j=>j.status==='queued'&&!j.hidden&&!this.active.has(j.id)&&(!this.store.state.paused||j.requestedStart));
         const configured=this.getSettings().submissionConcurrency;
         const limit=Math.max(1,Math.min(6,configured??Math.min(...pending.map(j=>j.scheme.concurrency))));
-        while(!this.store.state.paused&&inFlight.size<limit&&pending.length){
+        while(inFlight.size<limit&&pending.length){
           const job=pending.shift();let work;
           work=this.run(job).finally(()=>inFlight.delete(work));inFlight.add(work);
         }
@@ -244,7 +248,7 @@ export class AutomationQueue {
   async run(j) {
     this.active.add(j.id); j.status = 'running'; this.save();
     try {
-      while (j.stage !== 'done' && !this.store.state.paused && !j.deleteRequested) {
+      while (j.stage !== 'done' && (!this.store.state.paused||j.requestedStart) && !j.deleteRequested) {
         this.syncPenName(j);
         const stage = j.stage;
         j.attempts[stage] = (j.attempts[stage] || 0) + 1; this.save();
@@ -263,9 +267,9 @@ export class AutomationQueue {
       }
       j.status = j.stage === 'done' ? (j.scheme.destination === 'submit' && !j.remainderComplete ? 'watching' : 'done') : 'queued';
     } catch (e) {
-      j.status = e.waiting ? 'waiting' : 'attention'; if(e.waiting)j.retryAt=Date.now()+60000; j.error = { stage: j.stage, message: String(e.message || e), at: now() };
+      j.status = e.waiting ? 'waiting' : 'attention'; if(e.waiting)j.retryAt=Date.now()+60000; j.error = { code:e.code, stage: j.stage, message: String(e.message || e), at: now() };
       j.history.push({ ...j.error, result: 'failed' });
-    } finally { if(j.deleteRequested)hideSubmissionRecord(j);this.active.delete(j.id); this.save(); }
+    } finally { if(j.status!=='watching')delete j.requestedStart;if(j.deleteRequested)hideSubmissionRecord(j);this.active.delete(j.id); this.save(); }
   }
   settings(j, image = false) {
     const current = this.getSettings();
@@ -275,7 +279,8 @@ export class AutomationQueue {
     return { ...j.settings, ...Object.fromEntries(['apiBaseUrl','apiKey','textModel','imgApiBaseUrl','imgApiKey','imageModel','coverTemplate','coverExtra','promptTemplates','deaiPrompt'].map(k => [k, current[k]])) };
   }
   async site(j, operation) {
-    if (!this.getAccount() || accountKey(this.getAccount()) !== j.account) throw new Error('投稿账号未配置或已切换，请恢复导入时的账号后重试');
+    if(!this.getAccount()){const e=new Error('请到设置 → 平台账号登录');e.code='AUTH_REQUIRED';throw e;}
+    if (accountKey(this.getAccount()) !== j.account) throw new Error('投稿账号未配置或已切换，请恢复导入时的账号后重试');
     return this.withSite(r => {
       if (accountKey(this.getAccount()) !== j.account) throw new Error('等待站点操作期间账号已切换，请恢复原账号');
       return operation(r);
@@ -294,9 +299,9 @@ export class AutomationQueue {
     return result;
   }
   async syncReviews({ manual = false } = {}) {
-    if (this.monitoring || (!manual && this.store.state.paused)) return;
+    if (this.monitoring || (!manual && this.store.state.paused&&!this.store.state.jobs.some(j=>j.requestedStart))) return;
     const watchedStates=manual?['watching','done','blocked']:['watching','done'];
-    const jobs = this.store.state.jobs.filter(j => watchedStates.includes(j.status) && j.remote && j.scheme.destination === 'submit' && !j.remainderComplete && j.account === accountKey(this.getAccount()));
+    const jobs = this.store.state.jobs.filter(j => (manual||!this.store.state.paused||j.requestedStart)&&!j.hidden&&watchedStates.includes(j.status) && j.remote && j.scheme.destination === 'submit' && !j.remainderComplete && j.account === accountKey(this.getAccount()));
     if (!jobs.length) return;
     this.monitoring = true;
     this.store.state.lastReviewAttempt=now();this.save();
@@ -333,7 +338,7 @@ export class AutomationQueue {
       this.store.state.lastReviewSync=now();delete this.store.state.reviewError;this.save();
     } catch(e) {this.store.state.reviewError=e.message;this.save();if(manual)throw e;}
     finally {this.monitoring=false;}
-    if(!this.store.state.paused)this.pump();
+    if(!this.store.state.paused||this.store.state.jobs.some(j=>j.requestedStart&&j.status==='queued'))this.pump();
   }
   async step(j) {
     const s = j.scheme, network = s.destination !== 'package';

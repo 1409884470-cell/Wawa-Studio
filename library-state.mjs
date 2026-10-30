@@ -30,5 +30,5 @@ export function bookSubmission(jobs,id) {
 
 export function hideSubmissionRecord(j) {
   if (!j.hidden) j.recordStatus=j.status;
-  j.hidden=true;j.status='canceled';delete j.deleteRequested;
+  j.hidden=true;j.status='canceled';delete j.deleteRequested;delete j.requestedStart;
 }

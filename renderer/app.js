@@ -1246,11 +1246,9 @@ function refreshModelSelects(){
 async function loadAccountPage() {
   const cred = await backend.getCredentials();
   $('#acctPhone').value = cred.phone || '';
-  $('#acctBadge').textContent = cred.has ? '已保存登录凭据' : '未配置登录';
-  $('#acctBadge').className = 'badge ' + (cred.has ? 'green' : 'gray');
-  $('#acctLoginSub').textContent = cred.has
-    ? `自动登录：${String(cred.phone).replace(/^(\d{3})\d{4}(\d{4})$/, '$1****$2')}（投稿时自动处理登录与滑块）`
-    : '填写手机号与密码后，投稿时自动登录';
+  $('#acctBadge').textContent=cred.loginOpen?'待保存登录':cred.loginRequired?'需要登录':cred.sessionSaved?'登录已保存':'未登录';
+  $('#acctBadge').className='badge '+(cred.sessionSaved&&!cred.loginRequired?'green':'gray');
+  $('#acctLoginSub').textContent='';
   const s = await backend.getSettings();
 
   await refreshAccountList();
@@ -1261,6 +1259,15 @@ async function refreshAccountList() {
   $('#acctSelect').innerHTML = '<option value="">— 已保存账号 —</option>' +
     list.map(a => `<option value="${esc(a.name)}">${esc(a.name)}（${esc(a.phone)}）</option>`).join('');
 }
+$('#btnPlatformLogin').addEventListener('click',async()=>{
+  const button=$('#btnPlatformLogin');button.disabled=true;
+  try{const r=await backend.openPlatformLogin($('#acctPhone').value.trim());if(!r.ok)throw new Error(r.error);await loadAccountPage();toast('浏览器已打开');}catch(e){toast(e.message,'⚠️');}finally{button.disabled=false;}
+});
+$('#btnPlatformLoginSave').addEventListener('click',async()=>{
+  const button=$('#btnPlatformLoginSave');button.disabled=true;
+  try{const r=await backend.savePlatformLogin();if(!r.ok)throw new Error(r.error);await loadAccountPage();toast('登录已保存');}catch(e){toast(e.message,'⚠️');}finally{button.disabled=false;}
+});
+backend.onPlatformLoginState?.(()=>loadAccountPage().catch(()=>{}));
 $('#btnCredSave').addEventListener('click', async () => {
   const phone = $('#acctPhone').value.trim();
   const pwd = $('#acctPassword').value;
@@ -1283,7 +1290,7 @@ $('#btnAcctSave').addEventListener('click', async () => {
 $('#btnAcctSwitch').addEventListener('click', async () => {
   const name = $('#acctSelect').value;
   if (!name) return toast('先选择要切换的账号', '⚠️');
-  if (!confirm(`切换到「${name}」？\n浏览器会话将重置，下次投稿自动登录该账号。`)) return;
+  if (!confirm(`切换到「${name}」？\n切换后需在浏览器登录。`)) return;
   setBusy('正在切换账号并重置浏览器会话…');
   const r = await backend.switchAccount(name);
   setBusy(null);
@@ -1292,7 +1299,7 @@ $('#btnAcctSwitch').addEventListener('click', async () => {
     revData = null;
     tasks.forEach(t => { t.siteInfo = null; });
     renderTasks(); renderWorkbench();
-    addLog('success', '账号服务', `已切换到账号「${name}」，下次投稿自动登录`);
+    addLog('success', '账号服务', `已切换到账号「${name}」，请打开浏览器登录`);
     toast('已切换到：' + name, '👤');
   } else toast(r.error, '⚠️');
 });
@@ -1305,7 +1312,7 @@ $('#btnAcctDelete').addEventListener('click', async () => {
   toast('已删除账号', '🗑️');
 });
 $('#btnLogout').addEventListener('click', async () => {
-  if (!confirm('确定清除登录凭据？下次投稿需要重新配置手机号密码。')) return;
+  if (!confirm('确定退出当前登录？')) return;
   const r = await backend.clearCredentials();
   if (!r.ok) return toast(r.error, '⚠️');
   await loadAccountPage();

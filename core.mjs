@@ -189,10 +189,11 @@ export function deleteConfig(filename) {
 
 /* ---------------- 浏览器与登录 ---------------- */
 
-export function createRunner({ onLog = () => {} } = {}) {
+export function createRunner({ onLog = () => {}, onAuthRequired = () => {}, browserType = chromium } = {}) {
   const log = (...a) => { console.log('[wawa]', ...a); onLog(a.map(String).join(' ')); };
   let ctx = null;   // BrowserContext（launchPersistentContext 返回值）
   let page = null;
+  let authRequired=false;
 
   const api = {
     get running() { return !!ctx; },
@@ -202,7 +203,7 @@ export function createRunner({ onLog = () => {} } = {}) {
       if (ctx) return page;
       log(headless ? '启动浏览器（无头模式）...' : '启动浏览器窗口...');
       try {
-        ctx = await chromium.launchPersistentContext(PROFILE_DIR, {
+        ctx = await browserType.launchPersistentContext(PROFILE_DIR, {
           channel: 'chrome',
           headless,
           viewport: { width: 1440, height: 900 },
@@ -216,6 +217,7 @@ export function createRunner({ onLog = () => {} } = {}) {
         }
         throw e;
       }
+      ctx.on('close',()=>{ctx=null;page=null;});
       page = ctx.pages()[0] ?? await ctx.newPage();
       return page;
     },
@@ -224,51 +226,30 @@ export function createRunner({ onLog = () => {} } = {}) {
       if (ctx) { await ctx.close().catch(() => {}); ctx = null; page = null; log('浏览器已关闭。'); }
     },
 
-    // 登录：会话 → 自动账号密码登录 → 手动兜底
-    async ensureLogin({ loginWait = 300, onWait } = {}) {
-      const formReady = async () => (await page.locator('input[placeholder*="作品名称"]').count()) > 0;
-
-      log('打开投稿页面...');
-      await page.goto(FORM_URL, { waitUntil: 'domcontentloaded' });
-      await page.waitForTimeout(3000);
-      if (await formReady()) { log('已登录。'); return true; }
-
-      // 1) 注入保存的会话
-      if (fs.existsSync(SESSION_FILE)) {
-        await api._restoreSession();
-        await page.goto(FORM_URL, { waitUntil: 'domcontentloaded' });
-        await page.waitForTimeout(3000);
-        if (await formReady()) { log('已通过保存的会话登录。'); return true; }
+    async openLogin() {
+      if(!ctx)await api.launch({headless:false});
+      await page.goto(FORM_URL,{waitUntil:'domcontentloaded'});
+      await page.bringToFront();
+      return true;
+    },
+    async saveLoginSession() {
+      if(!page||page.isClosed())throw new Error('请先打开登录浏览器');
+      await page.goto(FORM_URL,{waitUntil:'domcontentloaded'});
+      try{await page.locator('input[placeholder*="作品名称"]').waitFor({state:'visible',timeout:10000});}
+      catch{throw new Error('尚未登录，请先在浏览器完成登录');}
+      await api._saveSession();authRequired=false;return true;
+    },
+    async ensureLogin() {
+      const required=()=>{authRequired=true;onAuthRequired();const e=new Error('登录已失效，请到设置 → 平台账号登录');e.code='AUTH_REQUIRED';return e;};
+      if(authRequired)throw required();
+      const formReady=async()=>{try{await page.locator('input[placeholder*="作品名称"]').waitFor({state:'visible',timeout:5000});return true;}catch{return false;}};
+      await page.goto(FORM_URL,{waitUntil:'domcontentloaded'});
+      if(await formReady())return true;
+      if(fs.existsSync(SESSION_FILE)){
+        await api._restoreSession();await page.goto(FORM_URL,{waitUntil:'domcontentloaded'});
+        if(await formReady())return true;
       }
-
-      // 2) 账号密码自动登录
-      const cred = loadCredentials();
-      if (cred?.phone && cred?.password) {
-        log('会话失效，尝试账号密码自动登录…');
-        try {
-          const ok = await api._autoPasswordLogin(cred.phone, cred.password, formReady);
-          if (ok) { await api._saveSession(); return true; }
-          log('自动登录未成功，转入手动登录。');
-        } catch (e) {
-          log(`自动登录出错：${e.message.split('\n')[0]}，转入手动登录。`);
-        }
-      }
-
-      // 3) 手动兜底：等用户在浏览器里操作
-      log('未登录。请在弹出的浏览器中完成登录...');
-      const deadline = Date.now() + loginWait * 1000;
-      while (Date.now() < deadline) {
-        await page.waitForTimeout(3000);
-        try { await page.goto(FORM_URL, { waitUntil: 'domcontentloaded' }); } catch { /* 导航竞争 */ }
-        await page.waitForTimeout(2000);
-        if (await formReady()) {
-          log('登录成功！');
-          await api._saveSession();
-          return true;
-        }
-        if (onWait) onWait(Math.round((deadline - Date.now()) / 1000));
-      }
-      throw new Error(`等待登录超时（${loginWait} 秒）`);
+      throw required();
     },
 
     // 账号密码登录：打开登录面板 → 手机号登录 → 密码登录 → 填写 → 提交
@@ -449,7 +430,7 @@ export function createRunner({ onLog = () => {} } = {}) {
         fs.mkdirSync(path.dirname(SESSION_FILE), { recursive: true });
         fs.writeFileSync(SESSION_FILE, JSON.stringify(session, null, 2));
         log('登录会话已保存。');
-      } catch (e) { log(`会话保存失败：${e.message.split('\n')[0]}`); }
+      } catch (e) { throw new Error('登录保存失败：'+e.message.split('\n')[0]); }
     },
 
     // 站内作品列表（分页拉全，返回未投稿优先的基础信息）
@@ -481,7 +462,7 @@ export function createRunner({ onLog = () => {} } = {}) {
         payload.mime = ({ jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp',
           txt: 'text/plain', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' })[ext] || 'application/octet-stream';
       }
-      return page.evaluate(async (p) => {
+      try{return await page.evaluate(async (p) => {
         const rid = crypto.randomUUID ? crypto.randomUUID().replaceAll('-', '') :
           Array.from(crypto.getRandomValues(new Uint8Array(16))).map(b => b.toString(16).padStart(2, '0')).join('');
         const H = {
@@ -503,9 +484,10 @@ export function createRunner({ onLog = () => {} } = {}) {
         }
         const r = await fetch('https://wawawriter.com' + p.path, { method: p.method, credentials: 'include', headers: H, body, signal: AbortSignal.timeout(120000) });
         const j = await r.json().catch(() => ({ code: r.status, message: '非 JSON 响应' }));
+        if(r.status===401||/未登录|登录过期|登录失效|请.*登录/.test(String(j.message||'')))throw new Error('AUTH_REQUIRED');
         if (!r.ok || j.code !== 200) throw new Error(j.message || `接口 ${p.path} 返回 ${j.code}`);
         return j.data;
-      }, payload);
+      }, payload);}catch(e){if(/AUTH_REQUIRED/.test(e.message)){authRequired=true;onAuthRequired();e.code='AUTH_REQUIRED';e.message='登录已失效，请到设置 → 平台账号登录';}throw e;}
     },
 
     // 封面/文件上传 → CDN URL

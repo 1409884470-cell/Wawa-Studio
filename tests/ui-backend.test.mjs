@@ -328,18 +328,18 @@ test('cover UI forwards selected horizontal size through the preload contract', 
 
 test('credentials status describes saved credentials instead of claiming logged in', async () => {
   const elements = Object.fromEntries(['#acctPhone', '#acctBadge', '#acctLoginSub', '#acctPen'].map(id => [id, {}]));
-  const context = vm.createContext({ $: s => elements[s], backend: { getCredentials: async () => ({ has: true, phone: 'test' }), getSettings: async () => ({}) },
+  const context = vm.createContext({ $: s => elements[s], backend: { getCredentials: async () => ({ has: true, phone: 'test',sessionSaved:true }), getSettings: async () => ({}) },
     refreshAccountList: async () => {} });
   vm.runInContext(ui.slice(ui.indexOf('async function loadAccountPage('), ui.indexOf('async function refreshAccountList(')), context);
   await context.loadAccountPage();
-  assert.equal(elements['#acctBadge'].textContent, '已保存登录凭据');
+  assert.equal(elements['#acctBadge'].textContent, '登录已保存');
 });
 
 test('changing background checkbox recreates browser with requested mode', async () => {
   const calls = [];
-  const context = vm.createContext({ runner: { running: true, close: async () => calls.push('close') }, runnerHeadless: true,
+  const context = vm.createContext({ manualLoginOpen:false,platformLoginRequired:false,requirePlatformLogin:()=>{},runner: { running: true, close: async () => calls.push('close') }, runnerHeadless: true,
     send: () => {}, createRunner: () => ({ running: false, launch: async options => calls.push(options.headless) }) });
-  vm.runInContext(main.slice(main.indexOf('async function getRunner('), main.indexOf("ipcMain.handle('site-works'")), context);
+  vm.runInContext(main.slice(main.indexOf('async function getRunner('), main.indexOf("ipcMain.handle('platform-login-open'")), context);
   await context.getRunner(false);
   assert.deepEqual(calls, ['close', false]);
 });

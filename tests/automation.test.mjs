@@ -401,3 +401,21 @@ test('uncertain remote creation recovers original pen from package even after li
  f.queue.save();f.restart();j=f.queue.store.state.jobs[0];f.queue.control(j.id,'retry');await f.run();
  assert.equal(j.status,'watching');assert.equal(j.settings.penName,'测试作者');assert.equal(f.calls.filter(x=>x==='create').length,1);
 });
+
+
+test('explicit book submission runs while queue paused without starting other queued books',async t=>{
+ const f=setup(t,{scheme:{destination:'package'}});const selected=await f.importBook();
+ const other={...structuredClone(selected),id:'unselected'};f.queue.store.state.jobs.push(other);
+ f.queue.startJobs([selected.id]);await f.queue.draining;
+ assert.equal(selected.status,'done');assert.equal(other.status,'queued');assert.equal(f.queue.store.state.paused,true);
+ assert.equal(f.calls.filter(x=>x==='analysis').length,1);assert.equal(selected.requestedStart,undefined);
+});
+
+
+test('direct submission keeps selected review tracking active until explicitly paused',async t=>{
+ const f=setup(t);const j=await f.importBook();f.queue.startJobs([j.id]);await f.queue.draining;
+ assert.equal(j.status,'watching');assert.equal(j.requestedStart,true);assert.equal(f.queue.store.state.paused,true);
+ await f.queue.syncReviews();assert.ok(f.queue.store.state.lastReviewSync);
+ const stamp=f.queue.store.state.lastReviewAttempt;f.queue.pause();assert.equal(j.requestedStart,undefined);
+ await f.queue.syncReviews();assert.equal(f.queue.store.state.lastReviewAttempt,stamp);
+});

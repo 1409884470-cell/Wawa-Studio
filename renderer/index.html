@@ -537,7 +537,7 @@
           <div class="page-head">
             <div>
               <h1>账号设置</h1>
-              <p class="page-sub">保存与切换蛙蛙平台账号；投稿署名统一在笔名库设置</p>
+              <p class="page-sub"></p>
             </div>
           </div>
 
@@ -550,23 +550,23 @@
             <div class="sender-grid" style="grid-template-columns:1fr 1fr;margin-top:12px">
               <div class="field">
                 <label>登录手机号</label>
-                <input id="acctPhone" type="text" placeholder="投稿时自动登录所用账号">
+                <input id="acctPhone" type="text" placeholder="登录账号手机号">
               </div>
               <div class="field">
-                <label>登录密码</label>
-                <input id="acctPassword" type="password" placeholder="留空 = 不修改已保存密码">
+                <label hidden>登录密码</label>
+                <input hidden id="acctPassword" type="password" placeholder="留空 = 不修改已保存密码">
               </div>
             </div>
             <div class="form-foot">
-              <button class="btn btn-ghost" id="btnLogout">清除登录凭据</button>
-              <button class="btn btn-primary" id="btnCredSave">保存登录凭据</button>
+              <button class="btn btn-ghost" id="btnLogout">退出登录</button>
+              <button hidden id="btnCredSave">保存登录凭据</button><button class="btn" id="btnPlatformLogin">打开浏览器登录</button><button class="btn btn-primary" id="btnPlatformLoginSave">保存登录</button>
             </div>
           </div>
 
           <div class="card">
             <div class="card-head">
               <h3>多账号管理</h3>
-              <span class="t-dim">保存多个账号一键切换（切换会重置浏览器会话）</span>
+              <span class="t-dim"></span>
             </div>
             <div class="sender-grid" style="grid-template-columns:1fr 1fr 1fr;align-items:end">
               <div class="field">
