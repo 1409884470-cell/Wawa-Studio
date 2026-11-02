@@ -40,6 +40,7 @@ const DEFAULT_SETTINGS = {
 export function loadSettings() {
   try {
     const settings=normalizeCoverSettings({...DEFAULT_SETTINGS,...JSON.parse(fs.readFileSync(SETTINGS_FILE,'utf8'))});
+    settings.submissionDailyLimit=Math.min(3,Math.max(1,Number(settings.submissionDailyLimit)||3));
     settings.promptTemplates=normalizePrompts(settings.promptTemplates);
     settings.penNames=(settings.penNames||[]).map(p=>({...p}));
     if(!settings.penLibraryVersion){
@@ -189,7 +190,7 @@ export function deleteConfig(filename) {
 
 /* ---------------- 浏览器与登录 ---------------- */
 
-export function createRunner({ onLog = () => {}, onAuthRequired = () => {}, browserType = chromium } = {}) {
+export function createRunner({ onLog = () => {}, onAuthRequired = () => {}, browserType = chromium, profileDir = PROFILE_DIR, sessionFile = SESSION_FILE, beforeSubmit = () => {}, onSubmitError = () => {}, checkQuota = () => {} } = {}) {
   const log = (...a) => { console.log('[wawa]', ...a); onLog(a.map(String).join(' ')); };
   let ctx = null;   // BrowserContext（launchPersistentContext 返回值）
   let page = null;
@@ -203,7 +204,7 @@ export function createRunner({ onLog = () => {}, onAuthRequired = () => {}, brow
       if (ctx) return page;
       log(headless ? '启动浏览器（无头模式）...' : '启动浏览器窗口...');
       try {
-        ctx = await browserType.launchPersistentContext(PROFILE_DIR, {
+        ctx = await browserType.launchPersistentContext(profileDir, {
           channel: 'chrome',
           headless,
           viewport: { width: 1440, height: 900 },
@@ -245,7 +246,7 @@ export function createRunner({ onLog = () => {}, onAuthRequired = () => {}, brow
       const formReady=async()=>{try{await page.locator('input[placeholder*="作品名称"]').waitFor({state:'visible',timeout:5000});return true;}catch{return false;}};
       await page.goto(FORM_URL,{waitUntil:'domcontentloaded'});
       if(await formReady())return true;
-      if(fs.existsSync(SESSION_FILE)){
+      if(fs.existsSync(sessionFile)){
         await api._restoreSession();await page.goto(FORM_URL,{waitUntil:'domcontentloaded'});
         if(await formReady())return true;
       }
@@ -400,7 +401,7 @@ export function createRunner({ onLog = () => {}, onAuthRequired = () => {}, brow
 
     async _restoreSession() {
       try {
-        const { localStorage: ls, cookie } = JSON.parse(fs.readFileSync(SESSION_FILE, 'utf-8'));
+        const { localStorage: ls, cookie } = JSON.parse(fs.readFileSync(sessionFile, 'utf-8'));
         await page.goto('https://wawawriter.com/app/', { waitUntil: 'domcontentloaded' });
         await page.evaluate((entries) => {
           for (const [k, v] of Object.entries(entries)) {
@@ -427,8 +428,8 @@ export function createRunner({ onLog = () => {}, onAuthRequired = () => {}, brow
           for (let i = 0; i < localStorage.length; i++) ls[localStorage.key(i)] = localStorage.getItem(localStorage.key(i));
           return { localStorage: ls, cookie: document.cookie };
         });
-        fs.mkdirSync(path.dirname(SESSION_FILE), { recursive: true });
-        fs.writeFileSync(SESSION_FILE, JSON.stringify(session, null, 2));
+        fs.mkdirSync(path.dirname(sessionFile), { recursive: true });
+        fs.writeFileSync(sessionFile, JSON.stringify(session, null, 2));
         log('登录会话已保存。');
       } catch (e) { throw new Error('登录保存失败：'+e.message.split('\n')[0]); }
     },
@@ -541,9 +542,15 @@ export function createRunner({ onLog = () => {}, onAuthRequired = () => {}, brow
     },
 
     // 提交投稿（chapter_ids 省略 = 全部）
+    checkSubmissionQuota() { return checkQuota(); },
+    async submitCounted(method,url,options,submissionId) {
+      await beforeSubmit({submissionId});
+      try { return await this._api(method,url,options); }
+      catch(e){await onSubmitError(e);throw e;}
+    },
     async apiSubmitSubmission(submissionId, chapterIds) {
-      return this._api('POST', `/wrhp-api/api/v1/submission/novel/${submissionId}/submit`,
-        chapterIds?.length ? { json: { chapter_ids: chapterIds } } : {});
+      return this.submitCounted('POST', `/wrhp-api/api/v1/submission/novel/${submissionId}/submit`,
+        chapterIds?.length ? { json: { chapter_ids: chapterIds } } : {}, submissionId);
     },
 
     // 已投稿作品：上传文件并入新章节
@@ -554,8 +561,8 @@ export function createRunner({ onLog = () => {}, onAuthRequired = () => {}, brow
 
     // 已投稿作品：提交选中章节 → {success_count, failed_count, failed_list}
     async apiSubmitChapters(submissionId, chapterIds) {
-      return this._api('POST', '/wrhp-api/api/v1/submission/update/submit_chapters',
-        { json: { submission_id: submissionId, chapter_ids: chapterIds } });
+      return this.submitCounted('POST', '/wrhp-api/api/v1/submission/update/submit_chapters',
+        { json: { submission_id: submissionId, chapter_ids: chapterIds } },submissionId);
     },
 
     // 删除投稿记录（自检清理用）

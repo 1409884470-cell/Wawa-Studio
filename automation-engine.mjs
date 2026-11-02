@@ -17,11 +17,22 @@ export const publicSettings = settings => Object.fromEntries(Object.entries(sett
 const retryable = e => /HTTP (429|5\d\d)|fetch failed|ECONNRESET|ETIMEDOUT|TimeoutError|network/i.test(e.message);
 
 export class AutomationQueue {
-  constructor({ store, root, getSettings, getAccount, getSite, aiFactory, withSite, checkConfig, emit = () => {}, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
-    Object.assign(this, { store, root, getSettings, getAccount, getSite, aiFactory, withSite, checkConfig, emit, sleep });
+  constructor({ store, root, getSettings, getAccount, getAccounts, chooseAccount, getSite, aiFactory, withSite, checkConfig, emit = () => {}, sleep = ms => new Promise(r => setTimeout(r, ms)) }) {
+    Object.assign(this, { store, root, getSettings, getAccount, getAccounts, chooseAccount, getSite, aiFactory, withSite, checkConfig, emit, sleep });
     this.running = false; this.active = new Set(); this.monitoring = false;
   }
-  snapshot() { return structuredClone({ ...this.store.state, running: this.running }); }
+  jobAccount(j) {
+    if(this.getAccounts)return this.getAccounts().find(a=>a.key===j.account)?.phone||'';
+    return this.getAccount();
+  }
+  assignAccount(j) {
+    if(j.scheme?.destination==='package'||!this.chooseAccount||j.remote||j.uploadIntent||j.repairSource||j.accountAssigned)return;
+    const a=this.chooseAccount(j);
+    if(!a){const e=new Error('请添加已登录账号，并配置可用笔名');e.code='AUTH_REQUIRED';throw e;}
+    if(j.account!==a.key)delete j.penId;
+    j.account=a.key;j.accountAssigned=true;delete j.awaitingAccount;
+  }
+  snapshot() { return structuredClone({ ...this.store.state, accounts:this.getAccounts?.().map(a=>({key:a.key,name:a.name,phone:a.phone}))||[], running: this.running }); }
   save() { this.store.save(); this.emit(this.snapshot()); }
   job(id) { const j = this.store.state.jobs.find(x => x.id === id); if (!j) throw new Error('任务不存在'); return j; }
   applyPrompt(key) {
@@ -55,6 +66,7 @@ export class AutomationQueue {
         const j = { id: crypto.randomUUID(), ...archived, originalPath: src, title: archived.originalName, stage: 'inspect', status: 'importing',
           createdAt: now(), updatedAt: now(), scheme: structuredClone(scheme), settings: publicSettings(settings),
           sourceTitle: files.length===1?source.title:undefined, writerId: files.length===1?source.writerId:undefined, account: accountKey(this.getAccount()), history: [], scores: [], attempts: {}, artifacts: {}, overrides: {} };
+        try{this.assignAccount(j);}catch{j.awaitingAccount=true;}
         this.store.state.jobs.push(j); this.save(); added.push(j.id);
         try {await this.step(j);j.history.push({stage:'inspect',at:now(),result:'ok'});j.stage='catalog';j.status='queued';}
         catch(e){j.status='attention';j.error={stage:'inspect',message:e.message,at:now()};}
@@ -123,7 +135,7 @@ export class AutomationQueue {
         if (patch?.ackWarnings) j.warningsApproved = true;
         if (patch?.useCurrentSettings) {
           const penName=j.settings.penName || j.cfg?.penName || j.settings.penNames?.find(p=>p.id===j.penId)?.name;
-          const account=accountKey(this.getAccount());
+          const account=j.account||accountKey(this.getAccount());
           if(j.account!==account)delete j.penId;
           j.settings = {...publicSettings(this.getSettings()),penName:penName||''}; j.account = account;
         }
@@ -185,11 +197,11 @@ export class AutomationQueue {
       name=j.cfg?.penName?.trim()||previous||j.settings.penNames?.find(p=>p.id===j.penId)?.name;
       if(!name)throw new Error('原投稿笔名缺失，请核对原作品署名后恢复任务备份');
     }else if(current.penLibraryOnly||current.penNames?.length){
-      const eligible=p=>p&&p.enabled!==false&&(!p.account||p.account===this.getAccount())&&(!p.channel||p.channel===j.analysis?.channel)&&(!p.genre||j.analysis?.novelType?.join('/').includes(p.genre));
+      const eligible=p=>p&&p.enabled!==false&&(!p.account||p.account===this.jobAccount(j))&&(!p.channel||p.channel===j.analysis?.channel)&&(!p.genre||j.analysis?.novelType?.join('/').includes(p.genre));
       let p=current.penNames?.find(p=>p.id===j.penId);
       if(!eligible(p)){
         p=current.penNames?.find(p=>p.name===previous&&eligible(p)&&(!p.limit||penStats(p,this.store.state.jobs.filter(x=>x.id!==j.id)).total<p.limit));
-        p??=choosePen(current,this.store.state.jobs.filter(x=>x.id!==j.id),{...j,penId:undefined},this.getAccount());
+        p??=choosePen(current,this.store.state.jobs.filter(x=>x.id!==j.id),{...j,penId:undefined},this.jobAccount(j));
       }
       if(!p?.name?.trim()){const e=new Error('没有符合账号、题材或额度条件的可用笔名，请在笔名库补充');e.waiting=true;throw e;}
       j.penId=p.id;name=p.name.trim();
@@ -231,9 +243,9 @@ export class AutomationQueue {
     this.running = true; this.save();
     try {
       const inFlight=new Set();
-      while (!this.store.state.paused || inFlight.size || this.store.state.jobs.some(j=>j.requestedStart&&j.status==='queued')) {
+      while (!this.store.state.paused || inFlight.size || this.store.state.jobs.some(j=>j.requestedStart&&['queued','waiting'].includes(j.status))) {
         for(const j of this.store.state.jobs)if(j.status==='waiting'&&(!j.retryAt||j.retryAt<=Date.now()))j.status='queued';
-        const pending=this.store.state.jobs.filter(j=>j.status==='queued'&&!j.hidden&&!this.active.has(j.id)&&(!this.store.state.paused||j.requestedStart));
+        const pending=this.store.state.jobs.filter(j=>j.status==='queued'&&!j.hidden&&!this.active.has(j.id)&&(!this.store.state.paused||j.requestedStart)).sort((a,b)=>Number(!!a.repairSource)-Number(!!b.repairSource));
         const configured=this.getSettings().submissionConcurrency;
         const limit=Math.max(1,Math.min(6,configured??Math.min(...pending.map(j=>j.scheme.concurrency))));
         while(inFlight.size<limit&&pending.length){
@@ -249,6 +261,7 @@ export class AutomationQueue {
     this.active.add(j.id); j.status = 'running'; this.save();
     try {
       while (j.stage !== 'done' && (!this.store.state.paused||j.requestedStart) && !j.deleteRequested) {
+        this.assignAccount(j);
         this.syncPenName(j);
         const stage = j.stage;
         j.attempts[stage] = (j.attempts[stage] || 0) + 1; this.save();
@@ -267,9 +280,9 @@ export class AutomationQueue {
       }
       j.status = j.stage === 'done' ? (j.scheme.destination === 'submit' && !j.remainderComplete ? 'watching' : 'done') : 'queued';
     } catch (e) {
-      j.status = e.waiting ? 'waiting' : 'attention'; if(e.waiting)j.retryAt=Date.now()+60000; j.error = { code:e.code, stage: j.stage, message: String(e.message || e), at: now() };
-      j.history.push({ ...j.error, result: 'failed' });
-    } finally { if(j.status!=='watching')delete j.requestedStart;if(j.deleteRequested)hideSubmissionRecord(j);this.active.delete(j.id); this.save(); }
+      j.status = e.waiting ? 'waiting' : 'attention'; if(e.waiting)j.retryAt=e.retryAt||Date.now()+60000; j.error = { code:e.code, stage: j.stage, message: String(e.message || e), at: now() };
+      j.history.push({ ...j.error, result: e.waiting?'waiting':'failed' });
+    } finally { if(!['watching','waiting'].includes(j.status))delete j.requestedStart;if(j.deleteRequested)hideSubmissionRecord(j);this.active.delete(j.id); this.save(); }
   }
   settings(j, image = false) {
     const current = this.getSettings();
@@ -279,12 +292,13 @@ export class AutomationQueue {
     return { ...j.settings, ...Object.fromEntries(['apiBaseUrl','apiKey','textModel','imgApiBaseUrl','imgApiKey','imageModel','coverTemplate','coverExtra','promptTemplates','deaiPrompt'].map(k => [k, current[k]])) };
   }
   async site(j, operation) {
-    if(!this.getAccount()){const e=new Error('请到设置 → 平台账号登录');e.code='AUTH_REQUIRED';throw e;}
-    if (accountKey(this.getAccount()) !== j.account) throw new Error('投稿账号未配置或已切换，请恢复导入时的账号后重试');
+    const phone=this.jobAccount(j);
+    if(!phone){const e=new Error('请到设置 → 平台账号登录');e.code='AUTH_REQUIRED';throw e;}
+    if (accountKey(this.jobAccount(j)) !== j.account) throw new Error('投稿账号未配置或已切换，请恢复导入时的账号后重试');
     return this.withSite(r => {
-      if (accountKey(this.getAccount()) !== j.account) throw new Error('等待站点操作期间账号已切换，请恢复原账号');
+      if (accountKey(this.jobAccount(j)) !== j.account) throw new Error('等待站点操作期间账号已切换，请恢复原账号');
       return operation(r);
-    });
+    }, phone);
   }
   chapters(j) { return JSON.parse(fs.readFileSync(j.artifacts.chapters, 'utf8')); }
   uploadChapters(j) { return j.warehouseAll ? this.chapters(j) : this.chapters(j).slice(0, j.plan?.count ?? j.chapterCount); }
@@ -301,14 +315,16 @@ export class AutomationQueue {
   async syncReviews({ manual = false } = {}) {
     if (this.monitoring || (!manual && this.store.state.paused&&!this.store.state.jobs.some(j=>j.requestedStart))) return;
     const watchedStates=manual?['watching','done','blocked']:['watching','done'];
-    const jobs = this.store.state.jobs.filter(j => (manual||!this.store.state.paused||j.requestedStart)&&!j.hidden&&watchedStates.includes(j.status) && j.remote && j.scheme.destination === 'submit' && !j.remainderComplete && j.account === accountKey(this.getAccount()));
+    const jobs = this.store.state.jobs.filter(j => (manual||!this.store.state.paused||j.requestedStart)&&!j.hidden&&watchedStates.includes(j.status) && j.remote && j.scheme.destination === 'submit' && !j.remainderComplete && accountKey(this.jobAccount(j))===j.account);
     if (!jobs.length) return;
     this.monitoring = true;
     this.store.state.lastReviewAttempt=now();this.save();
     try {
-      await this.site(jobs[0], async r => {
+      for(const key of new Set(jobs.map(j=>j.account))){
+      const accountJobs=jobs.filter(j=>j.account===key);
+      try { await this.site(accountJobs[0], async r => {
         const rows = await r.listSubmissions();
-        for (const j of jobs) {
+        for (const j of accountJobs) {
           // 用户在网络等待期间停止的任务不再执行自动跟踪动作。
           if (!watchedStates.includes(j.status)) continue;
           const row = rows.find(x => String(x.sid) === String(j.remote.sid));
@@ -334,11 +350,12 @@ export class AutomationQueue {
           } else {j.status='watching';j.result=['approved','contracting'].includes(review.status)?'审核通过，等待签约完成后补传':'首投已提交，正在跟踪审核';}
           this.save();
         }
-      });
+      }); } catch(e){if(manual)throw e;for(const j of accountJobs)j.reviewError=e.message;}
+      }
       this.store.state.lastReviewSync=now();delete this.store.state.reviewError;this.save();
     } catch(e) {this.store.state.reviewError=e.message;this.save();if(manual)throw e;}
     finally {this.monitoring=false;}
-    if(!this.store.state.paused||this.store.state.jobs.some(j=>j.requestedStart&&j.status==='queued'))this.pump();
+    if(!this.store.state.paused||this.store.state.jobs.some(j=>j.requestedStart&&['queued','waiting'].includes(j.status)))this.pump();
   }
   async step(j) {
     const s = j.scheme, network = s.destination !== 'package';
@@ -464,12 +481,13 @@ export class AutomationQueue {
         if (!j.uploadIntent) { j.warehouseAll = true; this.save(); }
         await this.site(j, async r => {
         if(!j.remote && !j.uploadIntent){
+          if(j.scheme.destination==='submit')r.checkSubmissionQuota?.();
           const current=this.getSettings(), p=current.penNames?.find(x=>x.id===j.penId);
           const at=Date.now(), day=t=>new Date(t+8*3600e3).toISOString().slice(0,10);
           const times=this.store.state.jobs.filter(x=>x.account===j.account).flatMap(x=>(x.submissionEvents||(x.uploadIntent?[x.uploadIntent.at]:[])).map(t=>Date.parse(t))).filter(Number.isFinite);
           const stat=p?penStats(p,this.store.state.jobs):null;
-          if((current.penLibraryOnly&&!p)||(p?.enabled===false)||(p?.account&&p.account!==this.getAccount())||(p?.dailyLimit&&stat.today>=p.dailyLimit)||(p?.gapMinutes&&at-stat.last<p.gapMinutes*60000)||
-             (current.submissionDailyLimit&&times.filter(t=>day(t)===day(at)).length>=current.submissionDailyLimit)||
+          if((current.penLibraryOnly&&!p)||(p?.enabled===false)||(p?.account&&p.account!==this.jobAccount(j))||(p?.dailyLimit&&stat.today>=p.dailyLimit)||(p?.gapMinutes&&at-stat.last<p.gapMinutes*60000)||
+             
              (current.submissionGapSeconds&&times.length&&at-Math.max(...times)<current.submissionGapSeconds*1000)){
             const e=new Error('等待笔名启用或投稿额度／间隔恢复');e.waiting=true;throw e;
           }
@@ -541,6 +559,7 @@ export class AutomationQueue {
           const subs = await r.listSubmissions();
           const remote = subs.find(x => String(x.sid) === String(j.remote.sid));
           if (!remote) throw new Error('投稿草稿不存在，请检查当前账号');
+          r.checkSubmissionQuota?.();
           j.submitIntent = { at: now(), ids: pending.map(c => c.node_id) }; this.save();
           const result = remote.status === 'draft' ? await r.apiSubmitSubmission(j.remote.sid, j.submitIntent.ids) : await r.apiSubmitChapters(j.remote.sid, j.submitIntent.ids);
           j.submitResult = result || {}; this.save();
@@ -630,6 +649,7 @@ export class AutomationQueue {
           if(!pending.length)return;
           if(j.restSubmitIntent)throw new Error('补投请求结果待核对，请检查站内状态');
           if(pending.some(c=>c.is_locked||c.node_id==null))throw new Error('部分剩余章节被锁定或没有标识');
+          r.checkSubmissionQuota?.();
           j.restSubmitIntent={at:now(),ids:pending.map(c=>c.node_id)};this.save();
           await r.apiSubmitChapters(j.remote.sid,j.restSubmitIntent.ids);
         });break;

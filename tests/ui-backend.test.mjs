@@ -337,7 +337,7 @@ test('credentials status describes saved credentials instead of claiming logged 
 
 test('changing background checkbox recreates browser with requested mode', async () => {
   const calls = [];
-  const context = vm.createContext({ manualLoginOpen:false,platformLoginRequired:false,requirePlatformLogin:()=>{},runner: { running: true, close: async () => calls.push('close') }, runnerHeadless: true,
+  const context = vm.createContext({ runnerPhone:'A',invalidAccounts:new Set(),accountPaths:()=>({}),loadCredentials:()=>({phone:'A'}),manualLoginOpen:false,platformLoginRequired:false,requirePlatformLogin:()=>{},runner: { running: true, close: async () => calls.push('close') }, runnerHeadless: true,
     send: () => {}, createRunner: () => ({ running: false, launch: async options => calls.push(options.headless) }) });
   vm.runInContext(main.slice(main.indexOf('async function getRunner('), main.indexOf("ipcMain.handle('platform-login-open'")), context);
   await context.getRunner(false);

@@ -8,6 +8,8 @@ directories:
 
 # 只打包运行必需文件；用户数据（profiles/data 的任务日志小说等）不进安装包
 files:
+  - account-profiles.mjs
+  - submission-quota.mjs
   - library-state.mjs
   - studio-main.mjs
   - writer-client.mjs

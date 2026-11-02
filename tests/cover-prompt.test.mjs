@@ -9,7 +9,7 @@ test('cover template substitutes metadata and fixed requirements without legacy 
 });
 test('automatic site operations launch headless',async()=>{
  const source=fs.readFileSync(new URL('../main.mjs',import.meta.url),'utf8');let selected;
- const context=vm.createContext({platformLoginRequired:false,manualLoginOpen:false,siteTail:Promise.resolve(),busy:false,revBusy:false,automationSiteBusy:false,getRunner:async headless=>{selected=headless;return{ensureLogin:async()=>{}};},send:()=>{}});
+ const context=vm.createContext({invalidAccounts:new Set(),loadCredentials:()=>({phone:'A'}),platformLoginRequired:false,manualLoginOpen:false,siteTail:Promise.resolve(),busy:false,revBusy:false,automationSiteBusy:false,getRunner:async headless=>{selected=headless;return{ensureLogin:async()=>{}};},send:()=>{}});
  vm.runInContext(source.slice(source.indexOf('async function withAutomationSite('),source.indexOf('function getAutomation()')),context);
  await context.withAutomationSite(async()=>{});assert.equal(selected,true);
 });

@@ -6,10 +6,11 @@ export const STUDIO_DEFAULTS = {
   penNames: [], penMode: 'balanced', coverExtra: '',
   revenueConcurrency: 3, revenueDelayMs: 300, revenueRefreshMinutes: 0,
   excludeRejectedRevenue: true, autoSubmitCompleted: true, resumeOnStartup: false,
-  submissionConcurrency: 2, submissionDailyLimit: 0, submissionGapSeconds: 0,
+  submissionConcurrency: 2, submissionDailyLimit: 3, submissionGapSeconds: 0,
 };
 export function validateStudio(input) {
   const s=normalizeCoverSettings({...STUDIO_DEFAULTS,...input});
+  s.submissionDailyLimit=Math.min(3,Math.max(1,Number(s.submissionDailyLimit)||3));
   for(const [k,max] of Object.entries({submissionConcurrency:6,qualityResubmits:20,otherResubmits:20,unknownResubmits:20,revenueConcurrency:6,revenueDelayMs:30000,revenueRefreshMinutes:1440,submissionDailyLimit:10000,submissionGapSeconds:86400,rewriteConcurrency:6,reviewPollMinutes:1440})) {
     const n=Number(s[k]);if(!Number.isInteger(n)||n<(['submissionConcurrency','revenueConcurrency','rewriteConcurrency'].includes(k)?1:k==='reviewPollMinutes'?2:0)||n>max)throw new Error(`设置超出范围：${k}`);s[k]=n;
   }

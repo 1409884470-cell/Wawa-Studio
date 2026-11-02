@@ -1,3 +1,5 @@
+import { accountPaths, migrateAccountProfile, clearAccountProfile } from './account-profiles.mjs';
+import { openQuota, pickAccount } from './submission-quota.mjs';
 import { attachStudio } from './studio-main.mjs';
 import { resolvePen } from './studio-policy.mjs';
 import crypto from 'node:crypto';
@@ -34,13 +36,26 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let win = null;
 let runner = null;
 let runnerHeadless = null;
+let runnerPhone=null;
+const invalidAccounts=new Set();
+migrateAccountProfile(loadCredentials()?.phone);
+let quota;
+function getQuota(){
+  quota??=openQuota(userPath('data','submission-quota.json'),{settings:loadSettings});
+  quota.migrate(getAutomation().store.state.jobs);return quota;
+}
+function availableAccounts(){
+  const list=loadAccounts(),current=loadCredentials()?.phone;
+  if(current&&!list.some(a=>a.phone===current))list.push({name:current,phone:current});
+  return [...new Map(list.map(a=>[a.phone,{...a,key:accountKey(a.phone),sessionSaved:fs.existsSync(accountPaths(a.phone).sessionFile)&&!invalidAccounts.has(a.phone)}])).values()];
+}
 let manualLoginOpen=false;
 let platformLoginRequired=false;
 let loginOpening=false;
 const loginResumeIds=new Set();
 function pauseForLogin(){
   if(!automation)return;
-  for(const j of automation.store.state.jobs)if(!j.hidden&&(j.status==='running'||['queued','watching'].includes(j.status)&&(!automation.store.state.paused||j.requestedStart)))loginResumeIds.add(j.id);
+  for(const j of automation.store.state.jobs)if(!j.hidden&&(j.status==='running'||['queued','watching','waiting'].includes(j.status)&&(!automation.store.state.paused||j.requestedStart)))loginResumeIds.add(j.id);
   automation.pause();
 }
 let busy = false;
@@ -48,16 +63,16 @@ let automationSiteBusy = false;
 let automation;
 let siteTail = Promise.resolve();
 
-async function withAutomationSite(fn) {
+async function withAutomationSite(fn,phone=loadCredentials()?.phone) {
   const previous = siteTail;
   let release;
   siteTail = new Promise(resolve => { release = resolve; });
   await previous;
   try {
     if (busy || revBusy) throw new Error('手动投稿或收益同步正在运行，请稍后重试自动任务');
-    if(platformLoginRequired||manualLoginOpen){const e=new Error('请到设置 → 平台账号登录');e.code='AUTH_REQUIRED';throw e;}
+    if(manualLoginOpen||invalidAccounts.has(phone)){const e=new Error('请到设置 → 平台账号登录');e.code='AUTH_REQUIRED';throw e;}
     automationSiteBusy = true;
-    const r = await getRunner(true);
+    const r = await getRunner(true,phone);
     await r.ensureLogin({ loginWait: 120, onWait: sec => send('login-wait', { secondsLeft: sec }) });
     return await fn(r);
   } finally { automationSiteBusy = false; release(); }
@@ -67,6 +82,8 @@ function getAutomation() {
   if (!automation) automation = new AutomationQueue({
     store: openStore(userPath('data', 'automation.json')), root: userPath('data', 'automation'),
     getSettings: loadSettings, getAccount: () => loadCredentials()?.phone || '', getSite: loadSiteData,
+    getAccounts:availableAccounts,
+    chooseAccount:j=>pickAccount(availableAccounts().filter(a=>!loadSettings().penLibraryOnly||loadSettings().penNames?.some(p=>p.enabled!==false&&(!p.account||p.account===a.phone))),getAutomation().store.state.jobs.filter(x=>x.id!==j.id),key=>getQuota().stats(key)),
     aiFactory: settings => createPackagingAI({ settings, onPrompt: (key,text) => {log('[提示词调用] 投稿 / '+key);if(text){const f=userPath('data','prompt-usage.json');let usage={};try{usage=JSON.parse(fs.readFileSync(f,'utf8'));}catch{}usage[key]={at:new Date().toISOString(),text};atomicJSON(f,usage);}}, coverDir: userPath('covers', 'automation'), compressImage: buf => compressCoverBuffer(buf,nativeImage), decodeImage: buf => !nativeImage.createFromBuffer(buf).isEmpty() }),
     withSite: withAutomationSite,
     checkConfig: (cfg, site) => validateConfig(cfg, site), emit: state => send('automation-state', state),
@@ -196,7 +213,7 @@ ipcMain.handle('save-settings', (_e, patch) => {
 
 ipcMain.handle('get-credentials', () => {
   const c = loadCredentials();
-  return {has:!!c?.phone,phone:c?.phone||'',sessionSaved:fs.existsSync(SESSION_FILE),loginRequired:platformLoginRequired,loginOpen:manualLoginOpen};
+  return {has:!!c?.phone,phone:c?.phone||'',sessionSaved:fs.existsSync(accountPaths(c?.phone).sessionFile),loginRequired:platformLoginRequired,loginOpen:manualLoginOpen};
 });
 ipcMain.handle('save-credentials', (_e, { phone, password }) => {
   try {
@@ -209,8 +226,7 @@ ipcMain.handle('save-credentials', (_e, { phone, password }) => {
 ipcMain.handle('clear-credentials', async () => {
   if (busy || revBusy || automationSiteBusy) return { ok: false, error: '站点操作执行中，请等待结束后清除账号' };
   if(runner){await runner.close();runner=null;}
-  const profile=path.resolve(PROFILE_DIR);if(path.dirname(profile)!==path.resolve(userPath('profiles')))return {ok:false,error:'浏览器数据目录异常'};
-  fs.rmSync(profile,{recursive:true,force:true});fs.rmSync(SESSION_FILE,{force:true});
+  clearAccountProfile(loadCredentials()?.phone);
   manualLoginOpen=false;platformLoginRequired=true;loginResumeIds.clear();automation?.pause();clearCredentials();return {ok:true};
 });
 
@@ -254,18 +270,22 @@ ipcMain.handle('save-cover', async (_e, { src, name }) => {
 
 /* ---------------- 站内作品导入 ---------------- */
 
-function requirePlatformLogin(){
-  if(!platformLoginRequired){log('登录已失效，请到设置 → 平台账号登录');platformLoginRequired=true;pauseForLogin();send('platform-login-state',{required:true});}
+function requirePlatformLogin(phone){
+  if(!invalidAccounts.has(phone)){invalidAccounts.add(phone);log(`账号 ${phone} 登录已失效，请到设置登录`);}
+  if(phone===loadCredentials()?.phone){platformLoginRequired=true;send('platform-login-state',{required:true});}
 }
-async function getRunner(headless = true) {
-  if(headless&&(manualLoginOpen||platformLoginRequired)){const e=new Error('请到设置 → 平台账号登录');e.code='AUTH_REQUIRED';throw e;}
-
-  if (runner?.running && runnerHeadless !== !!headless) {
-    await runner.close();
-    runner = null;
+async function getRunner(headless = true,phone=loadCredentials()?.phone||'') {
+  if(headless&&(manualLoginOpen||invalidAccounts.has(phone))){const e=new Error('请到设置 → 平台账号登录');e.code='AUTH_REQUIRED';throw e;}
+  if(runner&&(runnerHeadless!==!!headless||runnerPhone!==phone)){await runner.close();runner=null;}
+  if(!runner){
+    runnerPhone=phone;
+    runner=createRunner({...accountPaths(phone),onLog:line=>send('log',{line,ts:Date.now()}),onAuthRequired:()=>requirePlatformLogin(phone),
+      checkQuota:()=>getQuota().check(accountKey(phone)),
+      beforeSubmit:details=>getQuota().reserve(accountKey(phone),details),
+      onSubmitError:e=>{if(/(每日|每天|今日|当天).*(上限|限额|次数|3篇|三篇)|daily.*limit/i.test(e.message)){getQuota().block(accountKey(phone));e.waiting=true;e.code='DAILY_QUOTA';e.retryAt=getQuota().stats(accountKey(phone)).resetAt;}}
+    });
   }
-  if (!runner) runner = createRunner({ onLog: (line) => send('log', { line, ts: Date.now() }),onAuthRequired:requirePlatformLogin });
-  if (!runner.running) { await runner.launch({ headless: !!headless }); runnerHeadless = !!headless; }
+  if(!runner.running){await runner.launch({headless:!!headless});runnerHeadless=!!headless;}
   return runner;
 }
 
@@ -277,9 +297,6 @@ ipcMain.handle('platform-login-open',async(_e,{phone}={})=>{
     const previous=loadCredentials()?.phone;
     if(previous!==phone){
       if(runner){await runner.close();runner=null;}
-      const profile=path.resolve(PROFILE_DIR),parent=path.resolve(userPath('profiles'));
-      if(path.dirname(profile)!==parent)throw new Error('浏览器数据目录异常');
-      fs.rmSync(profile,{recursive:true,force:true});fs.rmSync(SESSION_FILE,{force:true});
       saveCredentials({phone,password:''});lastSummary=null;
     }
     manualLoginOpen=true;platformLoginRequired=true;pauseForLogin();
@@ -291,11 +308,14 @@ ipcMain.handle('platform-login-save',async()=>{
   try{
     if(!manualLoginOpen||!runner?.running)throw new Error('请先打开登录浏览器');
     await runner.saveLoginSession();
+    const phone=loadCredentials()?.phone;
+    invalidAccounts.delete(phone);
+    const accounts=loadAccounts();if(!accounts.some(a=>a.phone===phone)){accounts.push({name:phone,phone});saveAccounts(accounts);}
     await runner.close();runner=null;manualLoginOpen=false;platformLoginRequired=false;
     const q=getAutomation(),ids=[];
     for(const j of q.store.state.jobs)if(j.account===accountKey('')&&!j.remote&&!j.uploadIntent&&!j.repairSource)j.account=accountKey(loadCredentials()?.phone||'');
-    for(const j of q.store.state.jobs)if(!j.hidden&&j.account===accountKey(loadCredentials()?.phone||'')&&j.status==='attention'&&j.error?.code==='AUTH_REQUIRED'){j.status='queued';j.error=null;ids.push(j.id);}
-    for(const id of loginResumeIds){const j=q.store.state.jobs.find(j=>j.id===id&&!j.hidden&&j.account===accountKey(loadCredentials()?.phone||''));if(j?.status==='queued')ids.push(id);else if(j?.status==='watching')j.requestedStart=true;}loginResumeIds.clear();
+    for(const j of q.store.state.jobs)if(!j.hidden&&(j.awaitingAccount||j.account===accountKey(loadCredentials()?.phone||''))&&j.status==='attention'&&j.error?.code==='AUTH_REQUIRED'){j.status='queued';j.error=null;ids.push(j.id);}
+    for(const id of loginResumeIds){const j=q.store.state.jobs.find(j=>j.id===id&&!j.hidden);if(j?.status==='queued')ids.push(id);else if(['watching','waiting'].includes(j?.status))j.requestedStart=true;}loginResumeIds.clear();
     q.startJobs(ids);send('platform-login-state',{saved:true});return {ok:true};
   }catch(e){return {ok:false,error:e.message};}
 });
@@ -622,14 +642,15 @@ function saveAccounts(list) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(ACCOUNTS_FILE, JSON.stringify({ accounts: list }, null, 1));
 }
-ipcMain.handle('list-accounts', () => loadAccounts().map(a => ({ name: a.name, phone: a.phone })));
+ipcMain.handle('list-accounts', () => availableAccounts().map(a => ({name:a.name,phone:a.phone,sessionSaved:a.sessionSaved,...getQuota().stats(a.key)})));
 ipcMain.handle('save-account', (_e, { name, phone, password }) => {
-  if (!name?.trim() || !phone?.trim()) return { ok: false, error: '备注名和手机号不能为空' };
+  if (!name?.trim() || !/^\d{6,20}$/.test(phone?.trim()||'')) return { ok: false, error: '请填写备注和正确的手机号' };
   const list = loadAccounts();
-  const old = list.find(a => a.name === name.trim());
+  const old = list.find(a => a.name === name.trim() || a.phone===phone.trim());
+  if(old&&old.phone!==phone.trim())return {ok:false,error:'备注名已使用，请填写其他备注'};
   const pwd = password?.trim() || old?.password;
   // Browser login does not require storing a password.
-  if (old) { old.phone = phone.trim(); old.password = pwd; }
+  if (old) { old.name=name.trim();old.phone = phone.trim(); old.password = pwd; }
   else list.push({ name: name.trim(), phone: phone.trim(), password: pwd });
   saveAccounts(list);
   return { ok: true, accounts: list.map(a => ({ name: a.name, phone: a.phone })) };
@@ -638,20 +659,21 @@ ipcMain.handle('switch-account', async (_e, { name }) => {
   if (busy || revBusy || automationSiteBusy || loginOpening) return { ok: false, error: '请等待当前操作完成后再切换账号' };
   const a = loadAccounts().find(x => x.name === name);
   if (!a) return { ok: false, error: '账号不存在' };
-  saveCredentials({ phone: a.phone, password: a.password||'' });manualLoginOpen=false;platformLoginRequired=true;automation?.pause();
-  // 关闭浏览器并清掉旧会话，下次打开投稿页自动用新账号登录
-  if (runner) { await runner.close().catch(() => {}); runner = null; }
-  try { fs.rmSync(PROFILE_DIR, { recursive: true, force: true }); } catch { /* 目录占用 */ }
-  try { fs.rmSync(SESSION_FILE, { force: true }); } catch { /* 忽略 */ }
-  lastSummary = null;
-  log(`已切换账号：${name}（${a.phone}），浏览器会话已重置`);
+  if(manualLoginOpen)return {ok:false,error:'请先保存或退出当前登录'};
+  if(runner){await runner.close();runner=null;}
+  saveCredentials({phone:a.phone,password:''});
+  platformLoginRequired=invalidAccounts.has(a.phone)||!fs.existsSync(accountPaths(a.phone).sessionFile);
+  lastSummary=null;
+  log(`已切换账号：${name}`);
   return { ok: true };
 });
 async function deleteAccounts(names){
   try {
     if(!Array.isArray(names)||!names.length||names.some(n=>typeof n!=='string'))throw new Error('请选择账号');
-    if(busy||revBusy||automationSiteBusy)throw new Error('站点操作中，请等待完成后删除账号');
+    if(busy||revBusy||automationSiteBusy||manualLoginOpen||loginOpening)throw new Error('站点操作中，请等待完成后删除账号');
     const all=loadAccounts(),removed=all.filter(a=>names.includes(a.name)),current=loadCredentials()?.phone;
+    if(removed.some(a=>a.phone===runnerPhone)&&runner){await runner.close();runner=null;}
+    for(const a of removed)clearAccountProfile(a.phone);
     saveAccounts(all.filter(a=>!names.includes(a.name)));
     if(removed.some(a=>a.phone===current)){if(runner){await runner.close().catch(()=>{});runner=null;}clearCredentials();}
     return {ok:true,deleted:removed.length};
@@ -1231,7 +1253,8 @@ ipcMain.handle('check-update', async () => {
 app.whenReady().then(async () => {
   attachStudio({app,ipcMain,dialog,root:__dirname,userPath,getAutomation,loadSettings,saveSettings,send,loadCredentials});
   const reviewTimer=setInterval(()=>{
-    if(!automation || (automation.store.state.paused&&!automation.store.state.jobs.some(j=>j.requestedStart)) || platformLoginRequired || manualLoginOpen)return;
+    if(!automation || (automation.store.state.paused&&!automation.store.state.jobs.some(j=>j.requestedStart)) || manualLoginOpen)return;
+    automation.pump().catch(e=>log('任务调度失败：'+e.message));
     const minutes=Math.max(2,Math.min(1440,Number(loadSettings().reviewPollMinutes)||10));
     if(Date.now()-Date.parse(automation.store.state.lastReviewAttempt||'1970-01-01')>=minutes*60000)automation.syncReviews().catch(e=>log('审核同步失败：'+e.message));
   },60000);

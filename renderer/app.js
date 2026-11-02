@@ -1249,15 +1249,17 @@ async function loadAccountPage() {
   $('#acctBadge').textContent=cred.loginOpen?'待保存登录':cred.loginRequired?'需要登录':cred.sessionSaved?'登录已保存':'未登录';
   $('#acctBadge').className='badge '+(cred.sessionSaved&&!cred.loginRequired?'green':'gray');
   $('#acctLoginSub').textContent='';
-  const s = await backend.getSettings();
-
-  await refreshAccountList();
+  document.querySelector('.login-status').textContent=cred.has?'当前管理账号':'未配置账号';
+  document.querySelector('.login-phone').textContent=String(cred.phone||'').replace(/^(\d{3})\d{4}(\d{4})$/,'$1****$2');
+  const list=await refreshAccountList();
+  $('#acctSelect').value=list.find(a=>a.phone===cred.phone)?.name||'';
 }
 async function refreshAccountList() {
   const list = await backend.listAccounts();
   window.renderStudioAccounts?.(list);
   $('#acctSelect').innerHTML = '<option value="">— 已保存账号 —</option>' +
     list.map(a => `<option value="${esc(a.name)}">${esc(a.name)}（${esc(a.phone)}）</option>`).join('');
+  return list;
 }
 $('#btnPlatformLogin').addEventListener('click',async()=>{
   const button=$('#btnPlatformLogin');button.disabled=true;
@@ -1290,8 +1292,7 @@ $('#btnAcctSave').addEventListener('click', async () => {
 $('#btnAcctSwitch').addEventListener('click', async () => {
   const name = $('#acctSelect').value;
   if (!name) return toast('先选择要切换的账号', '⚠️');
-  if (!confirm(`切换到「${name}」？\n切换后需在浏览器登录。`)) return;
-  setBusy('正在切换账号并重置浏览器会话…');
+  setBusy('正在切换账号…');
   const r = await backend.switchAccount(name);
   setBusy(null);
   if (r.ok) {
@@ -1299,7 +1300,7 @@ $('#btnAcctSwitch').addEventListener('click', async () => {
     revData = null;
     tasks.forEach(t => { t.siteInfo = null; });
     renderTasks(); renderWorkbench();
-    addLog('success', '账号服务', `已切换到账号「${name}」，请打开浏览器登录`);
+    addLog('success', '账号服务', `已切换到账号「${name}」`);
     toast('已切换到：' + name, '👤');
   } else toast(r.error, '⚠️');
 });

@@ -33,7 +33,7 @@ import vm from 'node:vm';
 test('saving login resumes only current-account auth jobs and selected review tracking',async()=>{
  const jobs=[{id:'blocked',account:'A',status:'attention',error:{code:'AUTH_REQUIRED'}},{id:'other',account:'B',status:'attention',error:{code:'AUTH_REQUIRED'}},{id:'watch',account:'A',status:'watching'}];let handler,started=[];
  const source=fs.readFileSync(new URL('../main.mjs',import.meta.url),'utf8');
- const context=vm.createContext({ipcMain:{handle:(name,fn)=>handler=fn},manualLoginOpen:true,platformLoginRequired:true,runner:{running:true,saveLoginSession:async()=>{},close:async()=>{}},getAutomation:()=>({store:{state:{jobs}},startJobs:ids=>started=ids}),accountKey:x=>x,loadCredentials:()=>({phone:'A'}),loginResumeIds:new Set(['watch','other']),send:()=>{}});
+ const context=vm.createContext({invalidAccounts:new Set(),loadAccounts:()=>[{phone:'A'}],saveAccounts:()=>{},ipcMain:{handle:(name,fn)=>handler=fn},manualLoginOpen:true,platformLoginRequired:true,runner:{running:true,saveLoginSession:async()=>{},close:async()=>{}},getAutomation:()=>({store:{state:{jobs}},startJobs:ids=>started=ids}),accountKey:x=>x,loadCredentials:()=>({phone:'A'}),loginResumeIds:new Set(['watch','other']),send:()=>{}});
  vm.runInContext(source.slice(source.indexOf("ipcMain.handle('platform-login-save'"),source.indexOf("ipcMain.handle('site-works'")),context);
  assert.equal((await handler()).ok,true);assert.deepEqual([...started],['blocked']);assert.equal(jobs[1].status,'attention');assert.equal(jobs[2].requestedStart,true);
 });
