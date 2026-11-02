@@ -327,12 +327,13 @@ test('cover UI forwards selected horizontal size through the preload contract', 
 });
 
 test('credentials status describes saved credentials instead of claiming logged in', async () => {
-  const elements = Object.fromEntries(['#acctPhone', '#acctBadge', '#acctLoginSub', '#acctPen'].map(id => [id, {}]));
-  const context = vm.createContext({ $: s => elements[s], backend: { getCredentials: async () => ({ has: true, phone: 'test',sessionSaved:true }), getSettings: async () => ({}) },
-    refreshAccountList: async () => {} });
+  const elements = Object.fromEntries(['#acctPhone', '#acctBadge', '#acctLoginSub', '#acctPen', '#acctSelect', '.login-status', '.login-phone'].map(id => [id, {}]));
+  const context = vm.createContext({ document:{querySelector:s=>elements[s]}, $: s => elements[s], backend: { getCredentials: async () => ({ has: true, phone: 'test',sessionSaved:true }), getSettings: async () => ({}) },
+    refreshAccountList: async () => [{name:'测试账号',phone:'test'}] });
   vm.runInContext(ui.slice(ui.indexOf('async function loadAccountPage('), ui.indexOf('async function refreshAccountList(')), context);
   await context.loadAccountPage();
   assert.equal(elements['#acctBadge'].textContent, '登录已保存');
+  assert.equal(elements['#acctSelect'].value,'测试账号');assert.equal(elements['.login-phone'].textContent,'test');
 });
 
 test('changing background checkbox recreates browser with requested mode', async () => {
