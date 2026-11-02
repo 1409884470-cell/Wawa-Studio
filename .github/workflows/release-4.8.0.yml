@@ -13,7 +13,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ebe8b1f225c854b3131854c8d445748efb0fb91f
+          ref: 0ed20f3271e275f3ce282c692cd3070bd4acbcaa
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -55,5 +55,5 @@ jobs:
           Set-Content release-notes.txt '多账号独立保存浏览器登录，自动为新书分配账号；每号每日最多3次投稿请求，失败计次，额度独立保存且次日恢复。已上传作品绑定原账号，多账号站点操作串行，保留AI包装并行。备份不含账号、密钥或书稿。' -Encoding utf8
           gh release view v4.8.0 --repo "$env:GITHUB_REPOSITORY" *> $null
           if ($LASTEXITCODE -eq 0) { Write-Output 'Release already exists; keeping the backup unchanged.'; exit 0 }
-          gh release create v4.8.0 WawaStudio-4.8.0-Setup.exe SHA256.txt python-runtime-3.12.8.zip --repo "$env:GITHUB_REPOSITORY" --target ebe8b1f225c854b3131854c8d445748efb0fb91f --title "蛙蛙创作工作室 4.8.0" --notes-file release-notes.txt --latest
+          gh release create v4.8.0 WawaStudio-4.8.0-Setup.exe SHA256.txt python-runtime-3.12.8.zip --repo "$env:GITHUB_REPOSITORY" --target 0ed20f3271e275f3ce282c692cd3070bd4acbcaa --title "蛙蛙创作工作室 4.8.0" --notes-file release-notes.txt --latest
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
